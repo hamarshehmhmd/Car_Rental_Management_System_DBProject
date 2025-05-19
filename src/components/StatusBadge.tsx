@@ -25,7 +25,7 @@ const StatusBadge: React.FC<StatusBadgeProps> = ({ status, type }) => {
     
     // Rental statuses
     active: { bg: 'bg-green-100 border-green-400', text: 'text-green-700' },
-    overdue: { bg: 'bg-red-100 border-red-400', text: 'text-red-700' },
+    overdue_rental: { bg: 'bg-red-100 border-red-400', text: 'text-red-700' },
     
     // Maintenance statuses
     'in-progress': { bg: 'bg-blue-100 border-blue-400', text: 'text-blue-700' },
@@ -35,16 +35,31 @@ const StatusBadge: React.FC<StatusBadgeProps> = ({ status, type }) => {
     draft: { bg: 'bg-gray-100 border-gray-400', text: 'text-gray-700' },
     issued: { bg: 'bg-blue-100 border-blue-400', text: 'text-blue-700' },
     paid: { bg: 'bg-green-100 border-green-400', text: 'text-green-700' },
-    overdue: { bg: 'bg-red-100 border-red-400', text: 'text-red-700' },
+    overdue_invoice: { bg: 'bg-red-100 border-red-400', text: 'text-red-700' },
     
     // Payment statuses
-    pending: { bg: 'bg-yellow-100 border-yellow-400', text: 'text-yellow-700' },
+    pending_payment: { bg: 'bg-yellow-100 border-yellow-400', text: 'text-yellow-700' },
     failed: { bg: 'bg-red-100 border-red-400', text: 'text-red-700' },
     refunded: { bg: 'bg-purple-100 border-purple-400', text: 'text-purple-700' },
   };
   
   const statusLower = status.toLowerCase();
-  const colors = colorMap[statusLower] || { bg: 'bg-gray-100 border-gray-400', text: 'text-gray-700' };
+  
+  // Adjust status key based on context to avoid duplicate keys
+  let statusKey = statusLower;
+  if (statusLower === 'overdue') {
+    if (type === 'rental') {
+      statusKey = 'overdue_rental';
+    } else if (type === 'invoice') {
+      statusKey = 'overdue_invoice';
+    }
+  } else if (statusLower === 'pending') {
+    if (type === 'payment') {
+      statusKey = 'pending_payment';
+    }
+  }
+  
+  const colors = colorMap[statusKey] || { bg: 'bg-gray-100 border-gray-400', text: 'text-gray-700' };
   
   return (
     <Badge 

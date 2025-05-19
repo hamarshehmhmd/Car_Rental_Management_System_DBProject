@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
@@ -50,14 +49,14 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user, signOut, currentRole, setCurrentRole } = useAuth();
   
   const navItems = [
-    { path: '/', label: 'Dashboard', icon: Settings, requiredRoles: ['manager', 'agent', 'technician', 'accountant'] },
-    { path: '/customers', label: 'Customers', icon: Users, requiredRoles: ['manager', 'agent'] },
-    { path: '/vehicles', label: 'Vehicles', icon: Car, requiredRoles: ['manager', 'agent', 'technician'] },
-    { path: '/reservations', label: 'Reservations', icon: Calendar, requiredRoles: ['manager', 'agent'] },
-    { path: '/rentals', label: 'Rentals', icon: Car, requiredRoles: ['manager', 'agent'] },
-    { path: '/maintenance', label: 'Maintenance', icon: Wrench, requiredRoles: ['manager', 'technician'] },
-    { path: '/invoices', label: 'Invoices', icon: FileText, requiredRoles: ['manager', 'accountant'] },
-    { path: '/payments', label: 'Payments', icon: CreditCard, requiredRoles: ['manager', 'accountant'] },
+    { path: '/', label: 'Dashboard', icon: Settings, requiredRoles: ['manager', 'agent', 'technician', 'accountant'] as UserRole[] },
+    { path: '/customers', label: 'Customers', icon: Users, requiredRoles: ['manager', 'agent'] as UserRole[] },
+    { path: '/vehicles', label: 'Vehicles', icon: Car, requiredRoles: ['manager', 'agent', 'technician'] as UserRole[] },
+    { path: '/reservations', label: 'Reservations', icon: Calendar, requiredRoles: ['manager', 'agent'] as UserRole[] },
+    { path: '/rentals', label: 'Rentals', icon: Car, requiredRoles: ['manager', 'agent'] as UserRole[] },
+    { path: '/maintenance', label: 'Maintenance', icon: Wrench, requiredRoles: ['manager', 'technician'] as UserRole[] },
+    { path: '/invoices', label: 'Invoices', icon: FileText, requiredRoles: ['manager', 'accountant'] as UserRole[] },
+    { path: '/payments', label: 'Payments', icon: CreditCard, requiredRoles: ['manager', 'accountant'] as UserRole[] },
   ];
   
   return (
