@@ -1,6 +1,6 @@
 
 import React, { useEffect, useState } from 'react';
-import { PlusCircle, Filter, Mail, Phone } from 'lucide-react';
+import { PlusCircle, Filter, Mail, Phone, Trash } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 import PageHeader from '@/components/PageHeader';
 import DataTable from '@/components/DataTable';
@@ -22,6 +22,17 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Customer } from '@/types';
@@ -29,44 +40,233 @@ import { customerService } from '@/services/customerService';
 import { Separator } from '@/components/ui/separator';
 import { format } from 'date-fns';
 
+// Form for adding a new customer
+const AddCustomerForm = ({ onSuccess }: { onSuccess: () => void }) => {
+  const [isLoading, setIsLoading] = useState(false);
+  const [formData, setFormData] = useState({
+    firstName: '',
+    lastName: '',
+    email: '',
+    phone: '',
+    address: '',
+    dateOfBirth: '',
+    licenseNumber: '',
+    licenseExpiry: '',
+    customerType: 'Individual'
+  });
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({ ...prev, [name]: value }));
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsLoading(true);
+    
+    try {
+      await customerService.createCustomer(formData);
+      toast({
+        title: 'Customer Added',
+        description: `${formData.firstName} ${formData.lastName} has been added successfully.`,
+      });
+      onSuccess();
+    } catch (error) {
+      console.error('Error adding customer:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to add customer. Please try again.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4">
+      <div className="grid grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <Label htmlFor="firstName">First Name *</Label>
+          <Input 
+            id="firstName" 
+            name="firstName" 
+            value={formData.firstName} 
+            onChange={handleChange}
+            required
+          />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="lastName">Last Name *</Label>
+          <Input 
+            id="lastName" 
+            name="lastName" 
+            value={formData.lastName} 
+            onChange={handleChange}
+            required
+          />
+        </div>
+      </div>
+      
+      <div className="space-y-2">
+        <Label htmlFor="email">Email *</Label>
+        <Input 
+          id="email" 
+          name="email" 
+          type="email" 
+          value={formData.email} 
+          onChange={handleChange}
+          required
+        />
+      </div>
+      
+      <div className="space-y-2">
+        <Label htmlFor="phone">Phone *</Label>
+        <Input 
+          id="phone" 
+          name="phone" 
+          value={formData.phone} 
+          onChange={handleChange}
+          required
+        />
+      </div>
+      
+      <div className="space-y-2">
+        <Label htmlFor="address">Address</Label>
+        <Input 
+          id="address" 
+          name="address" 
+          value={formData.address} 
+          onChange={handleChange}
+        />
+      </div>
+      
+      <div className="grid grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <Label htmlFor="dateOfBirth">Date of Birth *</Label>
+          <Input 
+            id="dateOfBirth" 
+            name="dateOfBirth" 
+            type="date" 
+            value={formData.dateOfBirth} 
+            onChange={handleChange}
+            required
+          />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="customerType">Customer Type</Label>
+          <Input 
+            id="customerType" 
+            name="customerType" 
+            value={formData.customerType} 
+            onChange={handleChange}
+          />
+        </div>
+      </div>
+      
+      <div className="grid grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <Label htmlFor="licenseNumber">License Number *</Label>
+          <Input 
+            id="licenseNumber" 
+            name="licenseNumber" 
+            value={formData.licenseNumber} 
+            onChange={handleChange}
+            required
+          />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="licenseExpiry">License Expiry *</Label>
+          <Input 
+            id="licenseExpiry" 
+            name="licenseExpiry" 
+            type="date" 
+            value={formData.licenseExpiry} 
+            onChange={handleChange}
+            required
+          />
+        </div>
+      </div>
+      
+      <DialogFooter>
+        <Button type="submit" disabled={isLoading}>
+          {isLoading ? "Adding..." : "Add Customer"}
+        </Button>
+      </DialogFooter>
+    </form>
+  );
+};
+
 const Customers: React.FC = () => {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [customerDetailsOpen, setCustomerDetailsOpen] = useState(false);
+  const [addCustomerDialogOpen, setAddCustomerDialogOpen] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [customerToDelete, setCustomerToDelete] = useState<Customer | null>(null);
+
+  const fetchCustomers = async () => {
+    setLoading(true);
+    try {
+      const data = await customerService.getCustomers();
+      setCustomers(data);
+    } catch (error) {
+      console.error('Error fetching customers:', error);
+      toast({
+        title: 'Failed to load customers',
+        description: 'There was an error loading the customer data.',
+        variant: 'destructive',
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    const fetchCustomers = async () => {
-      setLoading(true);
-      try {
-        const data = await customerService.getCustomers();
-        setCustomers(data);
-      } catch (error) {
-        console.error('Error fetching customers:', error);
-        toast({
-          title: 'Failed to load customers',
-          description: 'There was an error loading the customer data.',
-          variant: 'destructive',
-        });
-      } finally {
-        setLoading(false);
-      }
-    };
-
     fetchCustomers();
   }, []);
 
   const handleAddCustomer = () => {
-    // Navigate to customer form or open modal
-    toast({
-      title: 'Feature Coming Soon',
-      description: 'Add customer functionality will be available soon.',
-    });
+    setAddCustomerDialogOpen(true);
+  };
+
+  const handleCustomerAdded = () => {
+    setAddCustomerDialogOpen(false);
+    fetchCustomers();
   };
 
   const handleViewCustomer = (customer: Customer) => {
     setSelectedCustomer(customer);
     setCustomerDetailsOpen(true);
+  };
+
+  const handleDeleteCustomer = async (customer: Customer) => {
+    setCustomerToDelete(customer);
+    setDeleteDialogOpen(true);
+  };
+
+  const confirmDeleteCustomer = async () => {
+    if (!customerToDelete) return;
+    
+    try {
+      await customerService.deleteCustomer(customerToDelete.id);
+      toast({
+        title: 'Customer Deleted',
+        description: `${customerToDelete.firstName} ${customerToDelete.lastName} has been removed.`,
+      });
+      fetchCustomers();
+    } catch (error) {
+      console.error('Error deleting customer:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to delete customer. Please try again.',
+        variant: 'destructive',
+      });
+    } finally {
+      setDeleteDialogOpen(false);
+      setCustomerToDelete(null);
+    }
   };
 
   const customerColumns = [
@@ -114,6 +314,24 @@ const Customers: React.FC = () => {
         <span>{format(new Date(customer.createdAt), 'MMM dd, yyyy')}</span>
       ),
     },
+    {
+      key: 'actions',
+      header: 'Actions',
+      cell: (customer: Customer) => (
+        <div className="flex space-x-2">
+          <Button 
+            variant="destructive" 
+            size="sm"
+            onClick={(e) => {
+              e.stopPropagation();
+              handleDeleteCustomer(customer);
+            }}
+          >
+            <Trash className="h-4 w-4" />
+          </Button>
+        </div>
+      ),
+    },
   ];
 
   return (
@@ -133,10 +351,23 @@ const Customers: React.FC = () => {
               </CardDescription>
             </div>
             
-            <Button onClick={handleAddCustomer}>
-              <PlusCircle className="mr-2 h-4 w-4" />
-              Add Customer
-            </Button>
+            <Dialog open={addCustomerDialogOpen} onOpenChange={setAddCustomerDialogOpen}>
+              <DialogTrigger asChild>
+                <Button onClick={handleAddCustomer}>
+                  <PlusCircle className="mr-2 h-4 w-4" />
+                  Add Customer
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="sm:max-w-[625px]">
+                <DialogHeader>
+                  <DialogTitle>Add New Customer</DialogTitle>
+                  <DialogDescription>
+                    Fill in the customer details below. Fields marked with * are required.
+                  </DialogDescription>
+                </DialogHeader>
+                <AddCustomerForm onSuccess={handleCustomerAdded} />
+              </DialogContent>
+            </Dialog>
           </CardHeader>
           <CardContent>
             <DataTable
@@ -234,6 +465,25 @@ const Customers: React.FC = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This action cannot be undone. This will permanently delete {customerToDelete?.firstName} {customerToDelete?.lastName}'s account 
+              and remove their data from our servers.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDeleteCustomer} className="bg-destructive text-destructive-foreground">
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };

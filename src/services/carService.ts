@@ -1,6 +1,6 @@
 
 import supabase from '@/lib/supabase';
-import { Vehicle, VehicleCategory } from '@/types';
+import { Vehicle, VehicleCategory, VehicleStatus } from '@/types';
 import { toast } from '@/hooks/use-toast';
 
 interface CarAPIResponse {
@@ -31,7 +31,7 @@ export const carService = {
       
       const data: CarAPIResponse[] = await response.json();
       
-      // Transform API data to our vehicle format
+      // Transform API data to our vehicle format with proper typing for status
       return data.map((car, index) => ({
         id: `v-${index + 1}`,
         vin: `VIN${Math.floor(Math.random() * 10000000)}`,
@@ -41,7 +41,7 @@ export const carService = {
         color: getRandomColor(),
         licensePlate: getRandomLicensePlate(),
         mileage: Math.floor(Math.random() * 100000),
-        status: getRandomStatus(),
+        status: getRandomStatus() as VehicleStatus,  // Cast to ensure type safety
         categoryId: getCategoryIdFromType(car.type || 'sedan'),
         imageUrl: car.img_url || `https://source.unsplash.com/random/800x600/?car,${car.make},${car.model}`
       }));
@@ -112,7 +112,7 @@ export const carService = {
         color: 'Silver',
         licensePlate: 'ABC123',
         mileage: 15600,
-        status: 'available',
+        status: 'available' as VehicleStatus,
         categoryId: 'cat-2',
         imageUrl: 'https://source.unsplash.com/random/800x600/?car,toyota,camry'
       },
@@ -125,7 +125,7 @@ export const carService = {
         color: 'Blue',
         licensePlate: 'XYZ789',
         mileage: 8200,
-        status: 'available',
+        status: 'available' as VehicleStatus,
         categoryId: 'cat-3',
         imageUrl: 'https://source.unsplash.com/random/800x600/?car,honda,crv'
       },
@@ -138,7 +138,7 @@ export const carService = {
         color: 'Red',
         licensePlate: 'MUS001',
         mileage: 20300,
-        status: 'maintenance',
+        status: 'maintenance' as VehicleStatus,
         categoryId: 'cat-4',
         imageUrl: 'https://source.unsplash.com/random/800x600/?car,ford,mustang'
       },
@@ -151,7 +151,7 @@ export const carService = {
         color: 'White',
         licensePlate: 'EQX234',
         mileage: 12400,
-        status: 'rented',
+        status: 'rented' as VehicleStatus,
         categoryId: 'cat-3',
         imageUrl: 'https://source.unsplash.com/random/800x600/?car,chevrolet,equinox'
       },
@@ -164,7 +164,7 @@ export const carService = {
         color: 'Black',
         licensePlate: 'BMW456',
         mileage: 5600,
-        status: 'available',
+        status: 'available' as VehicleStatus,
         categoryId: 'cat-5',
         imageUrl: 'https://source.unsplash.com/random/800x600/?car,bmw,3series'
       },
