@@ -1,3 +1,4 @@
+
 import type { Config } from "tailwindcss";
 
 export default {
@@ -61,6 +62,13 @@ export default {
 					'accent-foreground': 'hsl(var(--sidebar-accent-foreground))',
 					border: 'hsl(var(--sidebar-border))',
 					ring: 'hsl(var(--sidebar-ring))'
+				},
+				// Car rental specific colors
+				status: {
+					available: '#10B981', // Green
+					rented: '#F59E0B',    // Amber
+					maintenance: '#EF4444', // Red
+					reserved: '#3B82F6',   // Blue  
 				}
 			},
 			borderRadius: {
