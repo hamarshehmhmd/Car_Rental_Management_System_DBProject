@@ -7,11 +7,25 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import Layout from "@/components/Layout";
 import Dashboard from "@/pages/Dashboard";
+import Customers from "@/pages/Customers";
+import Vehicles from "@/pages/Vehicles";
+import Reservations from "@/pages/Reservations";
+import Rentals from "@/pages/Rentals";
+import Maintenance from "@/pages/Maintenance";
+import Invoices from "@/pages/Invoices";
+import Payments from "@/pages/Payments";
 import Login from "@/pages/Login";
 import NotFound from "@/pages/NotFound";
 
 // Create a new QueryClient instance
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      refetchOnWindowFocus: false,
+      staleTime: 5 * 60 * 1000, // 5 minutes
+    },
+  },
+});
 
 // Protected route component
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
@@ -35,7 +49,7 @@ const AppRoutes = () => {
     <Routes>
       <Route path="/login" element={user ? <Navigate to="/" /> : <Login />} />
       
-      {/* Protected Routes */}
+      {/* Dashboard Route */}
       <Route path="/" element={
         <ProtectedRoute>
           <Layout>
@@ -44,19 +58,62 @@ const AppRoutes = () => {
         </ProtectedRoute>
       } />
       
-      {/* Add placeholder routes for other sections */}
-      {['customers', 'vehicles', 'reservations', 'rentals', 'maintenance', 'invoices', 'payments'].map(path => (
-        <Route key={path} path={`/${path}`} element={
-          <ProtectedRoute>
-            <Layout>
-              <div className="flex items-center justify-center h-screen">
-                <h1 className="text-2xl font-bold">{path.charAt(0).toUpperCase() + path.slice(1)} Page</h1>
-                <p className="text-muted-foreground mt-2">Coming soon...</p>
-              </div>
-            </Layout>
-          </ProtectedRoute>
-        } />
-      ))}
+      {/* Main Application Routes */}
+      <Route path="/customers" element={
+        <ProtectedRoute>
+          <Layout>
+            <Customers />
+          </Layout>
+        </ProtectedRoute>
+      } />
+      
+      <Route path="/vehicles" element={
+        <ProtectedRoute>
+          <Layout>
+            <Vehicles />
+          </Layout>
+        </ProtectedRoute>
+      } />
+      
+      <Route path="/reservations" element={
+        <ProtectedRoute>
+          <Layout>
+            <Reservations />
+          </Layout>
+        </ProtectedRoute>
+      } />
+      
+      <Route path="/rentals" element={
+        <ProtectedRoute>
+          <Layout>
+            <Rentals />
+          </Layout>
+        </ProtectedRoute>
+      } />
+      
+      <Route path="/maintenance" element={
+        <ProtectedRoute>
+          <Layout>
+            <Maintenance />
+          </Layout>
+        </ProtectedRoute>
+      } />
+      
+      <Route path="/invoices" element={
+        <ProtectedRoute>
+          <Layout>
+            <Invoices />
+          </Layout>
+        </ProtectedRoute>
+      } />
+      
+      <Route path="/payments" element={
+        <ProtectedRoute>
+          <Layout>
+            <Payments />
+          </Layout>
+        </ProtectedRoute>
+      } />
       
       {/* Catch all route */}
       <Route path="*" element={<NotFound />} />
