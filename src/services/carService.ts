@@ -1,45 +1,71 @@
-
 import { supabase } from '@/integrations/supabase/client';
 import { Vehicle, VehicleCategory, VehicleStatus } from '@/types';
 import { toast } from '@/hooks/use-toast';
+import { supabaseService } from './supabaseService';
+
+// Transformer for Vehicle data between database and frontend
+const vehicleTransformer = {
+  toFrontend: (dbVehicle: any): Vehicle => {
+    return {
+      id: dbVehicle.id,
+      vin: dbVehicle.vin,
+      make: dbVehicle.make,
+      model: dbVehicle.model,
+      year: dbVehicle.year,
+      color: dbVehicle.color,
+      licensePlate: dbVehicle.licenseplate,
+      mileage: dbVehicle.mileage,
+      status: dbVehicle.status as VehicleStatus,
+      categoryId: dbVehicle.categoryid,
+      imageUrl: dbVehicle.imageurl
+    };
+  },
+  toDatabase: (vehicle: Partial<Vehicle>): Record<string, any> => {
+    const dbVehicle: Record<string, any> = {};
+    
+    if (vehicle.make !== undefined) dbVehicle.make = vehicle.make;
+    if (vehicle.model !== undefined) dbVehicle.model = vehicle.model;
+    if (vehicle.year !== undefined) dbVehicle.year = vehicle.year;
+    if (vehicle.color !== undefined) dbVehicle.color = vehicle.color;
+    if (vehicle.vin !== undefined) dbVehicle.vin = vehicle.vin;
+    if (vehicle.licensePlate !== undefined) dbVehicle.licenseplate = vehicle.licensePlate;
+    if (vehicle.mileage !== undefined) dbVehicle.mileage = vehicle.mileage;
+    if (vehicle.status !== undefined) dbVehicle.status = vehicle.status;
+    if (vehicle.categoryId !== undefined) dbVehicle.categoryid = vehicle.categoryId;
+    if (vehicle.imageUrl !== undefined) dbVehicle.imageurl = vehicle.imageUrl;
+    
+    return dbVehicle;
+  }
+};
+
+// Transformer for VehicleCategory data
+const categoryTransformer = {
+  toFrontend: (dbCategory: any): VehicleCategory => {
+    return {
+      id: dbCategory.id,
+      name: dbCategory.name,
+      description: dbCategory.description,
+      baseRentalRate: dbCategory.baserentalrate,
+      insuranceRate: dbCategory.insurancerate
+    };
+  },
+  toDatabase: (category: Partial<VehicleCategory>): Record<string, any> => {
+    const dbCategory: Record<string, any> = {};
+    
+    if (category.name !== undefined) dbCategory.name = category.name;
+    if (category.description !== undefined) dbCategory.description = category.description;
+    if (category.baseRentalRate !== undefined) dbCategory.baserentalrate = category.baseRentalRate;
+    if (category.insuranceRate !== undefined) dbCategory.insurancerate = category.insuranceRate;
+    
+    return dbCategory;
+  }
+};
 
 export const carService = {
   // Fetch vehicles from Supabase
   async getVehicles(): Promise<Vehicle[]> {
     try {
-      const { data: vehicles, error } = await supabase
-        .from('vehicles')
-        .select('*');
-      
-      if (error) throw error;
-      
-      if (vehicles && vehicles.length > 0) {
-        // Add category names
-        const categories = await this.getVehicleCategories();
-        
-        const enhancedVehicles = vehicles.map(vehicle => {
-          const category = categories.find(cat => cat.id === vehicle.category_id);
-          return {
-            id: vehicle.id,
-            vin: vehicle.vin,
-            make: vehicle.make,
-            model: vehicle.model,
-            year: vehicle.year,
-            color: vehicle.color,
-            licensePlate: vehicle.license_plate,
-            mileage: vehicle.mileage,
-            status: vehicle.status as VehicleStatus,
-            categoryId: vehicle.category_id,
-            categoryName: category?.name || 'Unknown',
-            imageUrl: vehicle.image_url
-          };
-        });
-        
-        return enhancedVehicles as Vehicle[];
-      }
-      
-      // If no vehicles found, return mock data
-      return carService.getCarMockData() as Vehicle[];
+      return await supabaseService.getAll<any, Vehicle>('vehicles', vehicleTransformer);
     } catch (error) {
       console.error('Error fetching vehicles:', error);
       toast({
@@ -55,42 +81,7 @@ export const carService = {
   // Create a new vehicle in Supabase
   async createVehicle(vehicle: Partial<Vehicle>): Promise<Vehicle> {
     try {
-      // Convert from frontend model to database model
-      const dbVehicle = {
-        make: vehicle.make,
-        model: vehicle.model,
-        year: vehicle.year,
-        color: vehicle.color,
-        vin: vehicle.vin,
-        license_plate: vehicle.licensePlate,
-        mileage: vehicle.mileage,
-        status: vehicle.status,
-        category_id: vehicle.categoryId,
-        image_url: vehicle.imageUrl
-      };
-      
-      const { data, error } = await supabase
-        .from('vehicles')
-        .insert([dbVehicle])
-        .select()
-        .single();
-      
-      if (error) throw error;
-      
-      // Convert back to frontend model
-      return {
-        id: data.id,
-        vin: data.vin,
-        make: data.make,
-        model: data.model,
-        year: data.year,
-        color: data.color,
-        licensePlate: data.license_plate,
-        mileage: data.mileage,
-        status: data.status as VehicleStatus,
-        categoryId: data.category_id,
-        imageUrl: data.image_url
-      };
+      return await supabaseService.create<any, Vehicle>('vehicles', vehicle, vehicleTransformer);
     } catch (error) {
       console.error('Error creating vehicle:', error);
       toast({
@@ -105,43 +96,7 @@ export const carService = {
   // Update an existing vehicle
   async updateVehicle(id: string, vehicle: Partial<Vehicle>): Promise<Vehicle> {
     try {
-      // Convert from frontend model to database model
-      const dbVehicle: Record<string, any> = {};
-      
-      if (vehicle.make) dbVehicle.make = vehicle.make;
-      if (vehicle.model) dbVehicle.model = vehicle.model;
-      if (vehicle.year) dbVehicle.year = vehicle.year;
-      if (vehicle.color) dbVehicle.color = vehicle.color;
-      if (vehicle.vin) dbVehicle.vin = vehicle.vin;
-      if (vehicle.licensePlate) dbVehicle.license_plate = vehicle.licensePlate;
-      if (vehicle.mileage) dbVehicle.mileage = vehicle.mileage;
-      if (vehicle.status) dbVehicle.status = vehicle.status;
-      if (vehicle.categoryId) dbVehicle.category_id = vehicle.categoryId;
-      if (vehicle.imageUrl) dbVehicle.image_url = vehicle.imageUrl;
-      
-      const { data, error } = await supabase
-        .from('vehicles')
-        .update(dbVehicle)
-        .eq('id', id)
-        .select()
-        .single();
-      
-      if (error) throw error;
-      
-      // Convert back to frontend model
-      return {
-        id: data.id,
-        vin: data.vin,
-        make: data.make,
-        model: data.model,
-        year: data.year,
-        color: data.color,
-        licensePlate: data.license_plate,
-        mileage: data.mileage,
-        status: data.status as VehicleStatus,
-        categoryId: data.category_id,
-        imageUrl: data.image_url
-      };
+      return await supabaseService.update<any, Vehicle>('vehicles', id, vehicle, vehicleTransformer);
     } catch (error) {
       console.error('Error updating vehicle:', error);
       toast({
@@ -156,12 +111,7 @@ export const carService = {
   // Delete a vehicle
   async deleteVehicle(id: string): Promise<void> {
     try {
-      const { error } = await supabase
-        .from('vehicles')
-        .delete()
-        .eq('id', id);
-      
-      if (error) throw error;
+      await supabaseService.delete('vehicles', id);
       
       toast({
         title: 'Vehicle deleted',
@@ -181,29 +131,7 @@ export const carService = {
   // Get vehicle categories from Supabase
   async getVehicleCategories(): Promise<VehicleCategory[]> {
     try {
-      const { data, error } = await supabase
-        .from('vehicle_categories')
-        .select('*');
-      
-      if (error) throw error;
-      
-      if (!data || data.length === 0) {
-        return [
-          { id: 'cat-1', name: 'Economy', description: 'Small, fuel-efficient cars', baseRentalRate: 25, insuranceRate: 5 },
-          { id: 'cat-2', name: 'Compact', description: 'Compact cars', baseRentalRate: 30, insuranceRate: 6 },
-          { id: 'cat-3', name: 'SUV', description: 'Sport Utility Vehicles', baseRentalRate: 45, insuranceRate: 9 },
-          { id: 'cat-4', name: 'Luxury', description: 'High-end luxury vehicles', baseRentalRate: 75, insuranceRate: 15 },
-          { id: 'cat-5', name: 'Premium', description: 'Premium vehicles', baseRentalRate: 60, insuranceRate: 12 }
-        ];
-      }
-      
-      return data.map(category => ({
-        id: category.id,
-        name: category.name,
-        description: category.description,
-        baseRentalRate: category.base_rental_rate,
-        insuranceRate: category.insurance_rate
-      })) as VehicleCategory[];
+      return await supabaseService.getAll<any, VehicleCategory>('vehicle_categories', categoryTransformer);
     } catch (error) {
       console.error('Error fetching vehicle categories:', error);
       // Return mock categories as fallback

@@ -5,17 +5,27 @@ import { Database } from '@/integrations/supabase/types';
 
 type TableNames = keyof Database['public']['Tables'];
 
+// Type for transforming data between database and frontend models
+type DataTransformer<DBType, FrontendType> = {
+  toFrontend: (dbData: DBType) => FrontendType;
+  toDatabase: (frontendData: Partial<FrontendType>) => Partial<DBType>;
+};
+
 // Generic data service for Supabase operations
 export const supabaseService = {
-  // Generic fetch function for any table
-  async getAll<T>(tableName: TableNames): Promise<T[]> {
+  // Generic fetch function for any table with data transformation
+  async getAll<DBType, FrontendType>(
+    tableName: TableNames, 
+    transformer: DataTransformer<DBType, FrontendType>
+  ): Promise<FrontendType[]> {
     try {
       const { data, error } = await supabase
         .from(tableName)
         .select('*');
       
       if (error) throw error;
-      return (data || []) as T[];
+      
+      return (data || []).map(item => transformer.toFrontend(item as DBType));
     } catch (error) {
       console.error(`Error fetching ${tableName}:`, error);
       toast({
@@ -28,7 +38,11 @@ export const supabaseService = {
   },
 
   // Get a single item by ID
-  async getById<T>(tableName: TableNames, id: string): Promise<T | null> {
+  async getById<DBType, FrontendType>(
+    tableName: TableNames, 
+    id: string, 
+    transformer: DataTransformer<DBType, FrontendType>
+  ): Promise<FrontendType | null> {
     try {
       const { data, error } = await supabase
         .from(tableName)
@@ -37,7 +51,7 @@ export const supabaseService = {
         .single();
       
       if (error) throw error;
-      return data as T;
+      return transformer.toFrontend(data as DBType);
     } catch (error) {
       console.error(`Error fetching ${tableName} by ID:`, error);
       return null;
@@ -45,11 +59,16 @@ export const supabaseService = {
   },
   
   // Create a new item
-  async create<T>(tableName: TableNames, item: Record<string, any>): Promise<T> {
+  async create<DBType, FrontendType>(
+    tableName: TableNames, 
+    item: Partial<FrontendType>,
+    transformer: DataTransformer<DBType, FrontendType>
+  ): Promise<FrontendType> {
     try {
+      const dbItem = transformer.toDatabase(item);
       const { data, error } = await supabase
         .from(tableName)
-        .insert(item)
+        .insert(dbItem)
         .select()
         .single();
       
@@ -57,15 +76,15 @@ export const supabaseService = {
       
       toast({
         title: 'Created Successfully',
-        description: `New ${tableName.slice(0, -1)} has been created.`,
+        description: `New record has been created.`,
       });
       
-      return data as T;
+      return transformer.toFrontend(data as DBType);
     } catch (error) {
       console.error(`Error creating ${tableName}:`, error);
       toast({
         title: 'Error Creating',
-        description: `Could not create ${tableName.slice(0, -1)}.`,
+        description: `Could not create record.`,
         variant: 'destructive'
       });
       throw error;
@@ -73,11 +92,17 @@ export const supabaseService = {
   },
   
   // Update an existing item
-  async update<T>(tableName: TableNames, id: string, item: Record<string, any>): Promise<T> {
+  async update<DBType, FrontendType>(
+    tableName: TableNames, 
+    id: string, 
+    item: Partial<FrontendType>,
+    transformer: DataTransformer<DBType, FrontendType>
+  ): Promise<FrontendType> {
     try {
+      const dbItem = transformer.toDatabase(item);
       const { data, error } = await supabase
         .from(tableName)
-        .update(item)
+        .update(dbItem)
         .eq('id', id)
         .select()
         .single();
@@ -86,15 +111,15 @@ export const supabaseService = {
       
       toast({
         title: 'Updated Successfully',
-        description: `${tableName.slice(0, -1)} has been updated.`,
+        description: `Record has been updated.`,
       });
       
-      return data as T;
+      return transformer.toFrontend(data as DBType);
     } catch (error) {
       console.error(`Error updating ${tableName}:`, error);
       toast({
         title: 'Error Updating',
-        description: `Could not update ${tableName.slice(0, -1)}.`,
+        description: `Could not update record.`,
         variant: 'destructive'
       });
       throw error;
@@ -113,13 +138,13 @@ export const supabaseService = {
       
       toast({
         title: 'Deleted Successfully',
-        description: `${tableName.slice(0, -1)} has been deleted.`,
+        description: `Record has been deleted.`,
       });
     } catch (error) {
       console.error(`Error deleting ${tableName}:`, error);
       toast({
         title: 'Error Deleting',
-        description: `Could not delete ${tableName.slice(0, -1)}.`,
+        description: `Could not delete record.`,
         variant: 'destructive'
       });
       throw error;

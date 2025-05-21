@@ -30,6 +30,7 @@ interface DataTableProps<T> {
   searchable?: boolean;
   onRowClick?: (item: T) => void;
   itemsPerPage?: number;
+  loading?: boolean;
 }
 
 function DataTable<T extends { id: string }>({
@@ -37,7 +38,8 @@ function DataTable<T extends { id: string }>({
   columns,
   searchable = true,
   onRowClick,
-  itemsPerPage = 10
+  itemsPerPage = 10,
+  loading = false
 }: DataTableProps<T>) {
   const [searchQuery, setSearchQuery] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
@@ -130,13 +132,25 @@ function DataTable<T extends { id: string }>({
             </TableRow>
           </TableHeader>
           <TableBody>
-            {paginatedData.length === 0 ? (
+            {loading ? (
+              // Loading state
+              <TableRow>
+                <TableCell colSpan={columns.length} className="text-center py-8">
+                  <div className="flex justify-center items-center">
+                    <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary"></div>
+                    <span className="ml-2">Loading...</span>
+                  </div>
+                </TableCell>
+              </TableRow>
+            ) : paginatedData.length === 0 ? (
+              // Empty state
               <TableRow>
                 <TableCell colSpan={columns.length} className="text-center py-8">
                   No data available
                 </TableCell>
               </TableRow>
             ) : (
+              // Data rows
               paginatedData.map(item => (
                 <TableRow
                   key={item.id}
@@ -156,7 +170,7 @@ function DataTable<T extends { id: string }>({
       </div>
 
       {/* Pagination */}
-      {totalPages > 1 && (
+      {!loading && totalPages > 1 && (
         <div className="mt-4">
           <Pagination>
             <PaginationContent>
