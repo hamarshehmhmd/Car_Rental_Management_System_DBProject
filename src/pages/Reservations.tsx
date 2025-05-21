@@ -1,7 +1,6 @@
 
 import React, { useEffect, useState } from 'react';
 import { PlusCircle, CalendarClock } from 'lucide-react';
-import { format } from 'date-fns';
 import { toast } from '@/hooks/use-toast';
 import PageHeader from '@/components/PageHeader';
 import DataTable from '@/components/DataTable';
@@ -15,7 +14,8 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import { Reservation } from '@/types';
-import supabase from '@/lib/supabase';
+import { reservationService } from '@/services/reservationService';
+import { safeFormatDate } from '@/utils/dateUtils';
 
 const Reservations: React.FC = () => {
   const [reservations, setReservations] = useState<Reservation[]>([]);
@@ -25,22 +25,8 @@ const Reservations: React.FC = () => {
     const fetchReservations = async () => {
       setLoading(true);
       try {
-        // In a real app, we would fetch from Supabase
-        // const { data, error } = await supabase
-        //   .from('reservations')
-        //   .select(`
-        //     *,
-        //     customers (firstName, lastName),
-        //     vehicle_categories (name)
-        //   `);
-        
-        // if (error) throw error;
-        
-        // Use mock data for now
-        setTimeout(() => {
-          setReservations(getReservationMockData());
-          setLoading(false);
-        }, 500);
+        const data = await reservationService.getReservations();
+        setReservations(data);
       } catch (error) {
         console.error('Error fetching reservations:', error);
         toast({
@@ -48,6 +34,7 @@ const Reservations: React.FC = () => {
           description: 'There was an error loading the reservation data.',
           variant: 'destructive',
         });
+      } finally {
         setLoading(false);
       }
     };
@@ -84,11 +71,11 @@ const Reservations: React.FC = () => {
         <div className="space-y-1">
           <div className="flex items-center text-sm">
             <CalendarClock className="mr-2 h-3.5 w-3.5 text-muted-foreground" />
-            <span>Pickup: {format(new Date(reservation.pickupDate), 'MMM dd, yyyy')}</span>
+            <span>Pickup: {safeFormatDate(reservation.pickupDate)}</span>
           </div>
           <div className="flex items-center text-sm">
             <CalendarClock className="mr-2 h-3.5 w-3.5 text-muted-foreground" />
-            <span>Return: {format(new Date(reservation.returnDate), 'MMM dd, yyyy')}</span>
+            <span>Return: {safeFormatDate(reservation.returnDate)}</span>
           </div>
         </div>
       ),
@@ -116,7 +103,7 @@ const Reservations: React.FC = () => {
       key: 'reservationDate',
       header: 'Reserved On',
       cell: (reservation: Reservation) => (
-        <span>{format(new Date(reservation.reservationDate), 'MMM dd, yyyy')}</span>
+        <span>{safeFormatDate(reservation.reservationDate)}</span>
       ),
     },
   ];
@@ -149,6 +136,7 @@ const Reservations: React.FC = () => {
               columns={reservationColumns}
               searchable={true}
               onRowClick={handleViewReservation}
+              loading={loading}
             />
           </CardContent>
         </Card>
@@ -156,95 +144,5 @@ const Reservations: React.FC = () => {
     </div>
   );
 };
-
-// Mock data for reservations
-function getReservationMockData(): Reservation[] {
-  return [
-    {
-      id: 'r1',
-      customerId: 'c1',
-      categoryId: 'cat2',
-      vehicleId: 'v1',
-      reservationDate: '2025-04-15',
-      pickupDate: '2025-05-20',
-      returnDate: '2025-05-27',
-      status: 'confirmed',
-      employeeId: 'e1',
-      customerName: 'John Smith',
-      categoryName: 'Compact',
-      vehicleInfo: 'Toyota Camry (2022)'
-    },
-    {
-      id: 'r2',
-      customerId: 'c2',
-      categoryId: 'cat3',
-      vehicleId: 'v2',
-      reservationDate: '2025-04-20',
-      pickupDate: '2025-05-25',
-      returnDate: '2025-05-30',
-      status: 'confirmed',
-      employeeId: 'e2',
-      customerName: 'Emily Johnson',
-      categoryName: 'SUV',
-      vehicleInfo: 'Honda CR-V (2023)'
-    },
-    {
-      id: 'r3',
-      customerId: 'c3',
-      categoryId: 'cat4',
-      vehicleId: null,
-      reservationDate: '2025-05-01',
-      pickupDate: '2025-05-15',
-      returnDate: '2025-05-18',
-      status: 'pending',
-      employeeId: 'e1',
-      customerName: 'Michael Brown',
-      categoryName: 'Luxury',
-      vehicleInfo: null
-    },
-    {
-      id: 'r4',
-      customerId: 'c4',
-      categoryId: 'cat1',
-      vehicleId: 'v4',
-      reservationDate: '2025-04-10',
-      pickupDate: '2025-05-10',
-      returnDate: '2025-05-17',
-      status: 'completed',
-      employeeId: 'e2',
-      customerName: 'Sarah Davis',
-      categoryName: 'Economy',
-      vehicleInfo: 'Chevrolet Equinox (2022)'
-    },
-    {
-      id: 'r5',
-      customerId: 'c5',
-      categoryId: 'cat3',
-      vehicleId: null,
-      reservationDate: '2025-05-08',
-      pickupDate: '2025-06-05',
-      returnDate: '2025-06-12',
-      status: 'confirmed',
-      employeeId: 'e1',
-      customerName: 'Robert Wilson',
-      categoryName: 'SUV',
-      vehicleInfo: null
-    },
-    {
-      id: 'r6',
-      customerId: 'c2',
-      categoryId: 'cat5',
-      vehicleId: null,
-      reservationDate: '2025-04-25',
-      pickupDate: '2025-05-30',
-      returnDate: '2025-06-06',
-      status: 'cancelled',
-      employeeId: 'e2',
-      customerName: 'Emily Johnson',
-      categoryName: 'Premium',
-      vehicleInfo: null
-    }
-  ];
-}
 
 export default Reservations;

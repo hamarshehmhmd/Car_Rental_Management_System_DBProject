@@ -1,7 +1,6 @@
 
 import React, { useEffect, useState } from 'react';
 import { PlusCircle, FileText, Car, Calendar } from 'lucide-react';
-import { format } from 'date-fns';
 import { toast } from '@/hooks/use-toast';
 import PageHeader from '@/components/PageHeader';
 import DataTable from '@/components/DataTable';
@@ -16,6 +15,7 @@ import {
 } from '@/components/ui/card';
 import { Invoice } from '@/types';
 import { invoiceService } from '@/services/invoiceService';
+import { safeFormatDate } from '@/utils/dateUtils';
 
 const Invoices: React.FC = () => {
   const [invoices, setInvoices] = useState<Invoice[]>([]);
@@ -63,7 +63,7 @@ const Invoices: React.FC = () => {
       cell: (invoice: Invoice) => (
         <div className="flex items-center space-x-2">
           <FileText className="h-4 w-4 text-muted-foreground" />
-          <span className="font-mono font-medium">INV-{invoice.id}</span>
+          <span className="font-mono font-medium">INV-{invoice.id.substring(0, 8)}</span>
         </div>
       ),
     },
@@ -91,11 +91,11 @@ const Invoices: React.FC = () => {
         <div className="space-y-1">
           <div className="flex items-center text-sm">
             <Calendar className="mr-2 h-3.5 w-3.5 text-muted-foreground" />
-            <span>Invoice: {format(new Date(invoice.invoiceDate), 'MMM dd, yyyy')}</span>
+            <span>Invoice: {safeFormatDate(invoice.invoiceDate)}</span>
           </div>
           <div className="flex items-center text-sm">
             <Calendar className="mr-2 h-3.5 w-3.5 text-muted-foreground" />
-            <span>Due: {format(new Date(invoice.dueDate), 'MMM dd, yyyy')}</span>
+            <span>Due: {safeFormatDate(invoice.dueDate)}</span>
           </div>
         </div>
       ),
@@ -144,6 +144,7 @@ const Invoices: React.FC = () => {
               columns={invoiceColumns}
               searchable={true}
               onRowClick={handleViewInvoice}
+              loading={loading}
             />
           </CardContent>
         </Card>

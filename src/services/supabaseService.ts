@@ -33,7 +33,7 @@ export const supabaseService = {
         description: `Could not fetch ${tableName} data.`,
         variant: 'destructive'
       });
-      throw error;
+      return [];
     }
   },
 

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { CalendarClock, Car, CheckSquare } from 'lucide-react';
-import { format, addDays, isAfter } from 'date-fns';
+import { format, addDays, isAfter, parseISO } from 'date-fns';
 import { toast } from '@/hooks/use-toast';
 import PageHeader from '@/components/PageHeader';
 import DataTable from '@/components/DataTable';
@@ -25,7 +25,57 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
-import { supabaseService } from '@/services/supabaseService';
+import { supabase } from '@/integrations/supabase/client';
+
+// Helper function to safely format dates that might be invalid
+const safeFormatDate = (dateString: string | undefined, fallback: string): string => {
+  if (!dateString) return fallback;
+  try {
+    return format(parseISO(dateString), 'MMM dd, yyyy');
+  } catch (error) {
+    console.error("Invalid date format:", dateString, error);
+    return fallback;
+  }
+};
+
+// Transformer for Rental data
+const rentalTransformer = {
+  toFrontend: (dbRental: any): Rental => {
+    return {
+      id: dbRental.id,
+      reservationId: dbRental.reservationid || '',
+      customerId: dbRental.customerid || '',
+      vehicleId: dbRental.vehicleid || '',
+      checkoutEmployeeId: dbRental.checkoutemployeeid || '',
+      checkinEmployeeId: dbRental.checkinemployeeid || '',
+      checkoutDate: dbRental.checkoutdate,
+      expectedReturnDate: dbRental.expectedreturndate,
+      actualReturnDate: dbRental.actualreturndate,
+      checkoutMileage: dbRental.checkoutmileage || 0,
+      returnMileage: dbRental.returnmileage,
+      status: dbRental.status as RentalStatus,
+      customerName: dbRental.customerName || 'Unknown Customer',
+      vehicleInfo: dbRental.vehicleInfo || 'Unknown Vehicle'
+    };
+  },
+  toDatabase: (rental: Partial<Rental>): Record<string, any> => {
+    const dbRental: Record<string, any> = {};
+    
+    if (rental.reservationId) dbRental.reservationid = rental.reservationId;
+    if (rental.customerId) dbRental.customerid = rental.customerId;
+    if (rental.vehicleId) dbRental.vehicleid = rental.vehicleId;
+    if (rental.checkoutEmployeeId) dbRental.checkoutemployeeid = rental.checkoutEmployeeId;
+    if (rental.checkinEmployeeId) dbRental.checkinemployeeid = rental.checkinEmployeeId;
+    if (rental.checkoutDate) dbRental.checkoutdate = rental.checkoutDate;
+    if (rental.expectedReturnDate) dbRental.expectedreturndate = rental.expectedReturnDate;
+    if (rental.actualReturnDate) dbRental.actualreturndate = rental.actualReturnDate;
+    if (rental.checkoutMileage !== undefined) dbRental.checkoutmileage = rental.checkoutMileage;
+    if (rental.returnMileage !== undefined) dbRental.returnmileage = rental.returnMileage;
+    if (rental.status) dbRental.status = rental.status;
+    
+    return dbRental;
+  }
+};
 
 const Rentals: React.FC = () => {
   const [rentals, setRentals] = useState<Rental[]>([]);
@@ -38,54 +88,63 @@ const Rentals: React.FC = () => {
     const fetchRentals = async () => {
       setLoading(true);
       try {
-        // Try to fetch rentals from Supabase
-        const rentalsData = await supabaseService.getAll<Rental>('rentals');
+        // First, get all rentals
+        const { data: rentalData, error } = await supabase
+          .from('rentals')
+          .select('*');
+          
+        if (error) throw error;
         
-        // If we have rentals, fetch related customer and vehicle data and format
-        if (rentalsData && rentalsData.length > 0) {
-          const enhancedRentals = await Promise.all(rentalsData.map(async (rental) => {
-            // Try to get customer name
-            let customerName = 'Unknown Customer';
+        // Convert to frontend model and enhance with related data
+        const rentals = await Promise.all((rentalData || []).map(async (rental) => {
+          const rentalModel = rentalTransformer.toFrontend(rental);
+          
+          // Get customer name
+          if (rental.customerid) {
             try {
-              const customer = await supabaseService.getById('customers', rental.customerId);
+              const { data: customer } = await supabase
+                .from('customers')
+                .select('firstname, lastname')
+                .eq('id', rental.customerid)
+                .maybeSingle();
+                
               if (customer) {
-                customerName = `${customer.first_name} ${customer.last_name}`;
+                rentalModel.customerName = `${customer.firstname} ${customer.lastname}`;
               }
             } catch (e) {
               console.error('Error fetching customer for rental:', e);
             }
-            
-            // Try to get vehicle info
-            let vehicleInfo = 'Unknown Vehicle';
+          }
+          
+          // Get vehicle info
+          if (rental.vehicleid) {
             try {
-              const vehicle = await supabaseService.getById('vehicles', rental.vehicleId);
+              const { data: vehicle } = await supabase
+                .from('vehicles')
+                .select('make, model, year')
+                .eq('id', rental.vehicleid)
+                .maybeSingle();
+                
               if (vehicle) {
-                vehicleInfo = `${vehicle.make} ${vehicle.model} (${vehicle.year})`;
+                rentalModel.vehicleInfo = `${vehicle.make} ${vehicle.model} (${vehicle.year})`;
               }
             } catch (e) {
               console.error('Error fetching vehicle for rental:', e);
             }
-            
-            return {
-              ...rental,
-              customerName,
-              vehicleInfo
-            };
-          }));
+          }
           
-          setRentals(enhancedRentals);
-        } else {
-          // Use mock data if no rentals found
-          setRentals(getRentalMockData());
-        }
+          return rentalModel;
+        }));
+        
+        setRentals(rentals);
       } catch (error) {
         console.error('Error fetching rentals:', error);
         toast({
           title: 'Failed to load rentals',
-          description: 'There was an error loading the rental data. Using mock data instead.',
+          description: 'There was an error loading the rental data.',
           variant: 'destructive',
         });
-        setRentals(getRentalMockData());
+        setRentals([]);
       } finally {
         setLoading(false);
       }
@@ -117,18 +176,31 @@ const Rentals: React.FC = () => {
       const returnMileageNum = parseInt(returnMileage, 10);
       
       // Update the rental in Supabase
-      const updatedRental = await supabaseService.update<Rental>('rentals', selectedRental.id, {
-        status: 'completed' as RentalStatus,
-        actualReturnDate: new Date().toISOString(),
-        returnMileage: returnMileageNum,
-        checkinEmployeeId: 'emp1', // In a real app, this would be the logged-in employee
-      });
+      const dbRental = {
+        status: 'completed',
+        actualreturndate: new Date().toISOString(),
+        returnmileage: returnMileageNum,
+        checkinemployeeid: 'emp1', // In a real app, this would be the logged-in employee
+      };
       
-      // Update local state with TypeScript-safe approach
+      const { data, error } = await supabase
+        .from('rentals')
+        .update(dbRental)
+        .eq('id', selectedRental.id)
+        .select()
+        .single();
+        
+      if (error) throw error;
+      
+      // Update local state
+      const updatedRental = rentalTransformer.toFrontend(data);
+      updatedRental.customerName = selectedRental.customerName;
+      updatedRental.vehicleInfo = selectedRental.vehicleInfo;
+      
       setRentals(prev => 
         prev.map(rental => 
           rental.id === selectedRental.id 
-            ? { ...rental, ...updatedRental } as Rental
+            ? updatedRental
             : rental
         )
       );
@@ -174,14 +246,14 @@ const Rentals: React.FC = () => {
         <div className="space-y-1">
           <div className="flex items-center text-sm">
             <CalendarClock className="mr-2 h-3.5 w-3.5 text-muted-foreground" />
-            <span>Out: {format(new Date(rental.checkoutDate), 'MMM dd, yyyy')}</span>
+            <span>Out: {safeFormatDate(rental.checkoutDate, 'N/A')}</span>
           </div>
           <div className="flex items-center text-sm">
             <CalendarClock className="mr-2 h-3.5 w-3.5 text-muted-foreground" />
             <span>
               {rental.actualReturnDate
-                ? `In: ${format(new Date(rental.actualReturnDate), 'MMM dd, yyyy')}`
-                : `Due: ${format(new Date(rental.expectedReturnDate), 'MMM dd, yyyy')}`}
+                ? `In: ${safeFormatDate(rental.actualReturnDate, 'N/A')}`
+                : `Due: ${safeFormatDate(rental.expectedReturnDate, 'N/A')}`}
             </span>
           </div>
         </div>
@@ -202,17 +274,22 @@ const Rentals: React.FC = () => {
     {
       key: 'status',
       header: 'Status',
-      cell: (rental: Rental) => (
-        <StatusBadge 
-          status={
-            rental.status === 'active' && 
-            isAfter(new Date(), new Date(rental.expectedReturnDate)) 
-              ? 'overdue' 
-              : rental.status
-          } 
-          type="rental" 
-        />
-      ),
+      cell: (rental: Rental) => {
+        let status = rental.status;
+        
+        // Check if rental is overdue
+        if (rental.status === 'active' && rental.expectedReturnDate) {
+          try {
+            if (isAfter(new Date(), parseISO(rental.expectedReturnDate))) {
+              status = 'overdue' as RentalStatus;
+            }
+          } catch (error) {
+            console.error("Error comparing dates:", error);
+          }
+        }
+        
+        return <StatusBadge status={status} type="rental" />;
+      },
     },
     {
       key: 'actions',
@@ -297,11 +374,11 @@ const Rentals: React.FC = () => {
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <Label>Checkout Date</Label>
-                    <div>{format(new Date(selectedRental.checkoutDate), 'MMMM d, yyyy')}</div>
+                    <div>{safeFormatDate(selectedRental.checkoutDate, 'N/A')}</div>
                   </div>
                   <div>
                     <Label>Expected Return</Label>
-                    <div>{format(new Date(selectedRental.expectedReturnDate), 'MMMM d, yyyy')}</div>
+                    <div>{safeFormatDate(selectedRental.expectedReturnDate, 'N/A')}</div>
                   </div>
                   <div>
                     <Label>Checkout Mileage</Label>
@@ -331,83 +408,4 @@ const Rentals: React.FC = () => {
   );
 };
 
-// Mock data for rentals, typed correctly
-function getRentalMockData(): Rental[] {
-  const today = new Date();
-  
-  return [
-    {
-      id: '1',
-      reservationId: 'r1',
-      customerId: 'c1',
-      vehicleId: 'v1',
-      checkoutEmployeeId: 'e1',
-      checkoutDate: format(addDays(today, -7), 'yyyy-MM-dd'),
-      expectedReturnDate: format(addDays(today, 3), 'yyyy-MM-dd'),
-      checkoutMileage: 12500,
-      status: 'active' as RentalStatus,
-      customerName: 'John Smith',
-      vehicleInfo: 'Toyota Camry (2023)'
-    },
-    {
-      id: '2',
-      reservationId: 'r2',
-      customerId: 'c2',
-      vehicleId: 'v2',
-      checkoutEmployeeId: 'e1',
-      checkoutDate: format(addDays(today, -14), 'yyyy-MM-dd'),
-      expectedReturnDate: format(addDays(today, -7), 'yyyy-MM-dd'),
-      checkoutMileage: 8700,
-      status: 'active' as RentalStatus,
-      customerName: 'Alice Johnson',
-      vehicleInfo: 'Honda Civic (2024)'
-    },
-    {
-      id: '3',
-      reservationId: 'r3',
-      customerId: 'c3',
-      vehicleId: 'v3',
-      checkoutEmployeeId: 'e2',
-      checkoutDate: format(addDays(today, -10), 'yyyy-MM-dd'),
-      expectedReturnDate: format(addDays(today, -3), 'yyyy-MM-dd'),
-      actualReturnDate: format(addDays(today, -3), 'yyyy-MM-dd'),
-      checkoutMileage: 23400,
-      returnMileage: 24150,
-      status: 'completed' as RentalStatus,
-      customerName: 'Robert Davis',
-      vehicleInfo: 'Ford Explorer (2022)'
-    },
-    {
-      id: '4',
-      reservationId: 'r4',
-      customerId: 'c4',
-      vehicleId: 'v4',
-      checkoutEmployeeId: 'e1',
-      checkinEmployeeId: 'e2',
-      checkoutDate: format(addDays(today, -21), 'yyyy-MM-dd'),
-      expectedReturnDate: format(addDays(today, -14), 'yyyy-MM-dd'),
-      actualReturnDate: format(addDays(today, -15), 'yyyy-MM-dd'),
-      checkoutMileage: 15800,
-      returnMileage: 16450,
-      status: 'completed' as RentalStatus,
-      customerName: 'Emma Wilson',
-      vehicleInfo: 'Nissan Rogue (2023)'
-    },
-    {
-      id: '5',
-      reservationId: 'r5',
-      customerId: 'c5',
-      vehicleId: 'v5',
-      checkoutEmployeeId: 'e2',
-      checkoutDate: format(addDays(today, -5), 'yyyy-MM-dd'),
-      expectedReturnDate: format(addDays(today, 2), 'yyyy-MM-dd'),
-      checkoutMileage: 32100,
-      status: 'active' as RentalStatus,
-      customerName: 'Michael Brown',
-      vehicleInfo: 'Jeep Cherokee (2022)'
-    }
-  ];
-}
-
-// Export the component
 export default Rentals;
