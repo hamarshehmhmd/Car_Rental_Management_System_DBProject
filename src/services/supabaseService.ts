@@ -25,7 +25,7 @@ export const supabaseService = {
       
       if (error) throw error;
       
-      return (data || []).map(item => transformer.toFrontend(item as DBType));
+      return (data || []).map((item: any) => transformer.toFrontend(item as DBType));
     } catch (error) {
       console.error(`Error fetching ${tableName}:`, error);
       toast({

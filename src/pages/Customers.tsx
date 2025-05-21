@@ -33,12 +33,27 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { Input } from '@/components/ui/input';
+import {
+  Input
+} from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Customer } from '@/types';
 import { customerService } from '@/services/customerService';
 import { Separator } from '@/components/ui/separator';
-import { format } from 'date-fns';
+import { format, parseISO, isValid } from 'date-fns';
+
+// Helper function to safely format dates
+const safeFormatDate = (dateString: string, formatStr: string = 'MMM dd, yyyy'): string => {
+  try {
+    if (!dateString) return 'N/A';
+    const date = parseISO(dateString);
+    if (!isValid(date)) return 'Invalid date';
+    return format(date, formatStr);
+  } catch (error) {
+    console.error(`Error formatting date ${dateString}:`, error);
+    return 'Invalid date';
+  }
+};
 
 // Form for adding a new customer
 const AddCustomerForm = ({ onSuccess }: { onSuccess: () => void }) => {
@@ -297,7 +312,7 @@ const Customers: React.FC = () => {
         <div>
           <div className="font-mono">{customer.licenseNumber}</div>
           <div className="text-sm text-muted-foreground">
-            Expires: {format(new Date(customer.licenseExpiry), 'MMM dd, yyyy')}
+            Expires: {safeFormatDate(customer.licenseExpiry)}
           </div>
         </div>
       ),
@@ -311,7 +326,7 @@ const Customers: React.FC = () => {
       key: 'createdAt',
       header: 'Customer Since',
       cell: (customer: Customer) => (
-        <span>{format(new Date(customer.createdAt), 'MMM dd, yyyy')}</span>
+        <span>{safeFormatDate(customer.createdAt)}</span>
       ),
     },
     {
@@ -375,6 +390,7 @@ const Customers: React.FC = () => {
               columns={customerColumns}
               searchable={true}
               onRowClick={handleViewCustomer}
+              loading={loading}
             />
           </CardContent>
         </Card>
@@ -404,7 +420,7 @@ const Customers: React.FC = () => {
                     </div>
                     <div>
                       <Label>Date of Birth</Label>
-                      <div>{format(new Date(selectedCustomer.dateOfBirth), 'MMMM d, yyyy')}</div>
+                      <div>{safeFormatDate(selectedCustomer.dateOfBirth, 'MMMM d, yyyy')}</div>
                     </div>
                     <div>
                       <Label>Customer Type</Label>
@@ -443,7 +459,7 @@ const Customers: React.FC = () => {
                   </div>
                   <div>
                     <Label>Expiry Date</Label>
-                    <div>{format(new Date(selectedCustomer.licenseExpiry), 'MMMM d, yyyy')}</div>
+                    <div>{safeFormatDate(selectedCustomer.licenseExpiry, 'MMMM d, yyyy')}</div>
                   </div>
                 </div>
               </div>
@@ -451,7 +467,7 @@ const Customers: React.FC = () => {
               <Separator />
               
               <div className="text-sm text-muted-foreground">
-                Customer since {format(new Date(selectedCustomer.createdAt), 'MMMM d, yyyy')}
+                Customer since {safeFormatDate(selectedCustomer.createdAt, 'MMMM d, yyyy')}
               </div>
             </div>
           )}
