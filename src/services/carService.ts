@@ -1,7 +1,7 @@
+
 import { supabase } from '@/integrations/supabase/client';
 import { Vehicle, VehicleCategory, VehicleStatus } from '@/types';
 import { toast } from '@/hooks/use-toast';
-import { supabaseService } from './supabaseService';
 
 export const carService = {
   // Fetch vehicles from Supabase
@@ -18,7 +18,7 @@ export const carService = {
         const categories = await this.getVehicleCategories();
         
         const enhancedVehicles = vehicles.map(vehicle => {
-          const category = categories.find(cat => cat.id === vehicle.categoryid);
+          const category = categories.find(cat => cat.id === vehicle.category_id);
           return {
             id: vehicle.id,
             vin: vehicle.vin,
@@ -26,12 +26,12 @@ export const carService = {
             model: vehicle.model,
             year: vehicle.year,
             color: vehicle.color,
-            licensePlate: vehicle.licenseplate,
+            licensePlate: vehicle.license_plate,
             mileage: vehicle.mileage,
             status: vehicle.status as VehicleStatus,
-            categoryId: vehicle.categoryid,
+            categoryId: vehicle.category_id,
             categoryName: category?.name || 'Unknown',
-            imageUrl: vehicle.imageurl
+            imageUrl: vehicle.image_url
           };
         });
         
@@ -62,11 +62,11 @@ export const carService = {
         year: vehicle.year,
         color: vehicle.color,
         vin: vehicle.vin,
-        licenseplate: vehicle.licensePlate,
+        license_plate: vehicle.licensePlate,
         mileage: vehicle.mileage,
         status: vehicle.status,
-        categoryid: vehicle.categoryId,
-        imageurl: vehicle.imageUrl
+        category_id: vehicle.categoryId,
+        image_url: vehicle.imageUrl
       };
       
       const { data, error } = await supabase
@@ -85,11 +85,11 @@ export const carService = {
         model: data.model,
         year: data.year,
         color: data.color,
-        licensePlate: data.licenseplate,
+        licensePlate: data.license_plate,
         mileage: data.mileage,
         status: data.status as VehicleStatus,
-        categoryId: data.categoryid,
-        imageUrl: data.imageurl
+        categoryId: data.category_id,
+        imageUrl: data.image_url
       };
     } catch (error) {
       console.error('Error creating vehicle:', error);
@@ -113,11 +113,11 @@ export const carService = {
       if (vehicle.year) dbVehicle.year = vehicle.year;
       if (vehicle.color) dbVehicle.color = vehicle.color;
       if (vehicle.vin) dbVehicle.vin = vehicle.vin;
-      if (vehicle.licensePlate) dbVehicle.licenseplate = vehicle.licensePlate;
+      if (vehicle.licensePlate) dbVehicle.license_plate = vehicle.licensePlate;
       if (vehicle.mileage) dbVehicle.mileage = vehicle.mileage;
       if (vehicle.status) dbVehicle.status = vehicle.status;
-      if (vehicle.categoryId) dbVehicle.categoryid = vehicle.categoryId;
-      if (vehicle.imageUrl) dbVehicle.imageurl = vehicle.imageUrl;
+      if (vehicle.categoryId) dbVehicle.category_id = vehicle.categoryId;
+      if (vehicle.imageUrl) dbVehicle.image_url = vehicle.imageUrl;
       
       const { data, error } = await supabase
         .from('vehicles')
@@ -136,11 +136,11 @@ export const carService = {
         model: data.model,
         year: data.year,
         color: data.color,
-        licensePlate: data.licenseplate,
+        licensePlate: data.license_plate,
         mileage: data.mileage,
         status: data.status as VehicleStatus,
-        categoryId: data.categoryid,
-        imageUrl: data.imageurl
+        categoryId: data.category_id,
+        imageUrl: data.image_url
       };
     } catch (error) {
       console.error('Error updating vehicle:', error);
@@ -201,8 +201,8 @@ export const carService = {
         id: category.id,
         name: category.name,
         description: category.description,
-        baseRentalRate: category.baserentalrate,
-        insuranceRate: category.insurancerate
+        baseRentalRate: category.base_rental_rate,
+        insuranceRate: category.insurance_rate
       })) as VehicleCategory[];
     } catch (error) {
       console.error('Error fetching vehicle categories:', error);

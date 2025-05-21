@@ -15,7 +15,7 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import { Invoice } from '@/types';
-import supabase from '@/lib/supabase';
+import { invoiceService } from '@/services/invoiceService';
 
 const Invoices: React.FC = () => {
   const [invoices, setInvoices] = useState<Invoice[]>([]);
@@ -25,22 +25,8 @@ const Invoices: React.FC = () => {
     const fetchInvoices = async () => {
       setLoading(true);
       try {
-        // In a real app, we would fetch from Supabase
-        // const { data, error } = await supabase
-        //   .from('invoices')
-        //   .select(`
-        //     *,
-        //     customers (firstName, lastName),
-        //     rentals (id, vehicleId)
-        //   `);
-        
-        // if (error) throw error;
-        
-        // Use mock data for now
-        setTimeout(() => {
-          setInvoices(getInvoiceMockData());
-          setLoading(false);
-        }, 500);
+        const data = await invoiceService.getInvoices();
+        setInvoices(data);
       } catch (error) {
         console.error('Error fetching invoices:', error);
         toast({
@@ -48,6 +34,7 @@ const Invoices: React.FC = () => {
           description: 'There was an error loading the invoice data.',
           variant: 'destructive',
         });
+      } finally {
         setLoading(false);
       }
     };
@@ -164,101 +151,5 @@ const Invoices: React.FC = () => {
     </div>
   );
 };
-
-// Mock data for invoices
-function getInvoiceMockData(): Invoice[] {
-  return [
-    {
-      id: 'i1',
-      rentalId: '1',
-      customerId: 'c1',
-      invoiceDate: '2025-04-15',
-      dueDate: '2025-04-29',
-      baseFee: 350,
-      insuranceFee: 50,
-      extraMileageFee: 0,
-      fuelFee: 25,
-      damageFee: 0,
-      lateFee: 0,
-      taxAmount: 42.5,
-      totalAmount: 467.5,
-      status: 'issued',
-      customerName: 'John Smith',
-      rentalInfo: 'Toyota Camry (2023)'
-    },
-    {
-      id: 'i2',
-      rentalId: '2',
-      customerId: 'c2',
-      invoiceDate: '2025-04-05',
-      dueDate: '2025-04-19',
-      baseFee: 225,
-      insuranceFee: 35,
-      extraMileageFee: 75,
-      fuelFee: 30,
-      damageFee: 150,
-      lateFee: 25,
-      taxAmount: 54,
-      totalAmount: 594,
-      status: 'overdue',
-      customerName: 'Alice Johnson',
-      rentalInfo: 'Honda Civic (2024)'
-    },
-    {
-      id: 'i3',
-      rentalId: '3',
-      customerId: 'c3',
-      invoiceDate: '2025-04-10',
-      dueDate: '2025-04-24',
-      baseFee: 400,
-      insuranceFee: 60,
-      extraMileageFee: 0,
-      fuelFee: 0,
-      damageFee: 0,
-      lateFee: 0,
-      taxAmount: 46,
-      totalAmount: 506,
-      status: 'paid',
-      customerName: 'Robert Davis',
-      rentalInfo: 'Ford Explorer (2022)'
-    },
-    {
-      id: 'i4',
-      rentalId: '4',
-      customerId: 'c4',
-      invoiceDate: '2025-03-25',
-      dueDate: '2025-04-08',
-      baseFee: 275,
-      insuranceFee: 40,
-      extraMileageFee: 50,
-      fuelFee: 45,
-      damageFee: 0,
-      lateFee: 0,
-      taxAmount: 41,
-      totalAmount: 451,
-      status: 'paid',
-      customerName: 'Emma Wilson',
-      rentalInfo: 'Nissan Rogue (2023)'
-    },
-    {
-      id: 'i5',
-      rentalId: '5',
-      customerId: 'c5',
-      invoiceDate: '2025-05-02',
-      dueDate: '2025-05-16',
-      baseFee: 500,
-      insuranceFee: 75,
-      extraMileageFee: 0,
-      fuelFee: 0,
-      damageFee: 0,
-      lateFee: 0,
-      taxAmount: 57.5,
-      totalAmount: 632.5,
-      status: 'draft',
-      customerName: 'Michael Brown',
-      rentalInfo: 'Jeep Cherokee (2022)'
-    }
-  ];
-}
 
 export default Invoices;

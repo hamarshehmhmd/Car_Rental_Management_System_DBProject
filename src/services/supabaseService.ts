@@ -1,11 +1,14 @@
 
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
+import { Database } from '@/integrations/supabase/types';
+
+type TableNames = keyof Database['public']['Tables'];
 
 // Generic data service for Supabase operations
 export const supabaseService = {
   // Generic fetch function for any table
-  async getAll<T>(tableName: string): Promise<T[]> {
+  async getAll<T>(tableName: TableNames): Promise<T[]> {
     try {
       const { data, error } = await supabase
         .from(tableName)
@@ -25,7 +28,7 @@ export const supabaseService = {
   },
 
   // Get a single item by ID
-  async getById<T>(tableName: string, id: string): Promise<T | null> {
+  async getById<T>(tableName: TableNames, id: string): Promise<T | null> {
     try {
       const { data, error } = await supabase
         .from(tableName)
@@ -42,11 +45,11 @@ export const supabaseService = {
   },
   
   // Create a new item
-  async create<T>(tableName: string, item: Partial<T>): Promise<T> {
+  async create<T>(tableName: TableNames, item: Record<string, any>): Promise<T> {
     try {
       const { data, error } = await supabase
         .from(tableName)
-        .insert([item])
+        .insert(item)
         .select()
         .single();
       
@@ -70,7 +73,7 @@ export const supabaseService = {
   },
   
   // Update an existing item
-  async update<T>(tableName: string, id: string, item: Partial<T>): Promise<T> {
+  async update<T>(tableName: TableNames, id: string, item: Record<string, any>): Promise<T> {
     try {
       const { data, error } = await supabase
         .from(tableName)
@@ -99,7 +102,7 @@ export const supabaseService = {
   },
   
   // Delete an item
-  async delete(tableName: string, id: string): Promise<void> {
+  async delete(tableName: TableNames, id: string): Promise<void> {
     try {
       const { error } = await supabase
         .from(tableName)
