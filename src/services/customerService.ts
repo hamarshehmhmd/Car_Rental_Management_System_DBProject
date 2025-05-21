@@ -1,5 +1,5 @@
 
-import supabase from '@/lib/supabase';
+import { supabase } from '@/integrations/supabase/client';
 import { Customer } from '@/types';
 import { toast } from '@/hooks/use-toast';
 
@@ -7,41 +7,33 @@ export const customerService = {
   // Fetch customers from Supabase
   async getCustomers(): Promise<Customer[]> {
     try {
-      const { data: existingCustomers, error: fetchError } = await supabase
+      const { data, error } = await supabase
         .from('customers')
         .select('*');
       
-      // If we have customers, return them
-      if (existingCustomers && existingCustomers.length > 0) {
-        return existingCustomers as Customer[];
+      if (error) throw error;
+      
+      if (data && data.length > 0) {
+        // Map database fields to our frontend model
+        return data.map(customer => ({
+          id: customer.id,
+          firstName: customer.firstname,
+          lastName: customer.lastname,
+          email: customer.email,
+          phone: customer.phone,
+          address: customer.address,
+          dateOfBirth: customer.dateofbirth,
+          licenseNumber: customer.licensenumber,
+          licenseExpiry: customer.licenseexpiry,
+          customerType: customer.customertype,
+          createdAt: customer.createdat || new Date().toISOString()
+        })) as Customer[];
       }
       
-      // If no customers exist, populate with dummy data
-      const dummyCustomers = customerService.getCustomerMockData();
-      
-      // Insert the dummy customers into Supabase
-      const { error: insertError } = await supabase
-        .from('customers')
-        .insert(dummyCustomers);
-      
-      if (insertError) {
-        console.error('Error inserting customers:', insertError);
-        throw insertError;
-      }
-      
-      // Fetch the newly inserted customers
-      const { data: newCustomers, error: newFetchError } = await supabase
-        .from('customers')
-        .select('*');
-      
-      if (newFetchError) {
-        console.error('Error fetching new customers:', newFetchError);
-        throw newFetchError;
-      }
-      
-      return (newCustomers || []) as Customer[];
+      // If no customers found, return mock data
+      return customerService.getCustomerMockData();
     } catch (error) {
-      console.error('Error in getCustomers:', error);
+      console.error('Error fetching customers:', error);
       toast({
         title: 'Error fetching customers',
         description: 'Could not fetch customer data. Using mock data instead.',
@@ -49,6 +41,159 @@ export const customerService = {
       });
       
       return customerService.getCustomerMockData();
+    }
+  },
+  
+  // Get a single customer by ID
+  async getCustomerById(id: string): Promise<Customer | null> {
+    try {
+      const { data, error } = await supabase
+        .from('customers')
+        .select('*')
+        .eq('id', id)
+        .single();
+      
+      if (error) throw error;
+      
+      if (!data) return null;
+      
+      return {
+        id: data.id,
+        firstName: data.firstname,
+        lastName: data.lastname,
+        email: data.email,
+        phone: data.phone,
+        address: data.address,
+        dateOfBirth: data.dateofbirth,
+        licenseNumber: data.licensenumber,
+        licenseExpiry: data.licenseexpiry,
+        customerType: data.customertype,
+        createdAt: data.createdat || new Date().toISOString()
+      } as Customer;
+    } catch (error) {
+      console.error('Error fetching customer:', error);
+      return null;
+    }
+  },
+  
+  // Create a new customer
+  async createCustomer(customer: Omit<Customer, 'id' | 'createdAt'>): Promise<Customer> {
+    try {
+      const dbCustomer = {
+        firstname: customer.firstName,
+        lastname: customer.lastName,
+        email: customer.email,
+        phone: customer.phone,
+        address: customer.address,
+        dateofbirth: customer.dateOfBirth,
+        licensenumber: customer.licenseNumber,
+        licenseexpiry: customer.licenseExpiry,
+        customertype: customer.customerType,
+        createdat: new Date().toISOString()
+      };
+      
+      const { data, error } = await supabase
+        .from('customers')
+        .insert([dbCustomer])
+        .select()
+        .single();
+      
+      if (error) throw error;
+      
+      return {
+        id: data.id,
+        firstName: data.firstname,
+        lastName: data.lastname,
+        email: data.email,
+        phone: data.phone,
+        address: data.address,
+        dateOfBirth: data.dateofbirth,
+        licenseNumber: data.licensenumber,
+        licenseExpiry: data.licenseexpiry,
+        customerType: data.customertype,
+        createdAt: data.createdat
+      } as Customer;
+    } catch (error) {
+      console.error('Error creating customer:', error);
+      toast({
+        title: 'Error creating customer',
+        description: 'Could not create the customer.',
+        variant: 'destructive'
+      });
+      throw error;
+    }
+  },
+  
+  // Update an existing customer
+  async updateCustomer(id: string, customer: Partial<Customer>): Promise<Customer> {
+    try {
+      const dbCustomer: Record<string, any> = {};
+      
+      if (customer.firstName) dbCustomer.firstname = customer.firstName;
+      if (customer.lastName) dbCustomer.lastname = customer.lastName;
+      if (customer.email) dbCustomer.email = customer.email;
+      if (customer.phone) dbCustomer.phone = customer.phone;
+      if (customer.address) dbCustomer.address = customer.address;
+      if (customer.dateOfBirth) dbCustomer.dateofbirth = customer.dateOfBirth;
+      if (customer.licenseNumber) dbCustomer.licensenumber = customer.licenseNumber;
+      if (customer.licenseExpiry) dbCustomer.licenseexpiry = customer.licenseExpiry;
+      if (customer.customerType) dbCustomer.customertype = customer.customerType;
+      
+      const { data, error } = await supabase
+        .from('customers')
+        .update(dbCustomer)
+        .eq('id', id)
+        .select()
+        .single();
+      
+      if (error) throw error;
+      
+      return {
+        id: data.id,
+        firstName: data.firstname,
+        lastName: data.lastname,
+        email: data.email,
+        phone: data.phone,
+        address: data.address,
+        dateOfBirth: data.dateofbirth,
+        licenseNumber: data.licensenumber,
+        licenseExpiry: data.licenseexpiry,
+        customerType: data.customertype,
+        createdAt: data.createdat
+      } as Customer;
+    } catch (error) {
+      console.error('Error updating customer:', error);
+      toast({
+        title: 'Error updating customer',
+        description: 'Could not update the customer.',
+        variant: 'destructive'
+      });
+      throw error;
+    }
+  },
+  
+  // Delete a customer
+  async deleteCustomer(id: string): Promise<void> {
+    try {
+      const { error } = await supabase
+        .from('customers')
+        .delete()
+        .eq('id', id);
+      
+      if (error) throw error;
+      
+      toast({
+        title: 'Customer deleted',
+        description: 'Customer has been successfully deleted.',
+      });
+    } catch (error) {
+      console.error('Error deleting customer:', error);
+      toast({
+        title: 'Error deleting customer',
+        description: 'Could not delete the customer.',
+        variant: 'destructive'
+      });
+      throw error;
     }
   },
   
@@ -121,77 +266,5 @@ export const customerService = {
         createdAt: '2023-05-12T11:00:00Z'
       }
     ];
-  },
-  
-  // Get a single customer by ID
-  async getCustomerById(id: string): Promise<Customer | null> {
-    try {
-      const { data, error } = await supabase
-        .from('customers')
-        .select('*')
-        .eq('id', id)
-        .single();
-      
-      if (error) throw error;
-      return data as Customer;
-    } catch (error) {
-      console.error('Error fetching customer:', error);
-      return null;
-    }
-  },
-  
-  // Create a new customer
-  async createCustomer(customer: Omit<Customer, 'id' | 'createdAt'>): Promise<Customer> {
-    try {
-      const newCustomer = {
-        ...customer,
-        createdAt: new Date().toISOString()
-      };
-      
-      const { data, error } = await supabase
-        .from('customers')
-        .insert([newCustomer])
-        .select()
-        .single();
-      
-      if (error) throw error;
-      return data as Customer;
-    } catch (error) {
-      console.error('Error creating customer:', error);
-      throw error;
-    }
-  },
-  
-  // Update an existing customer
-  async updateCustomer(id: string, customer: Partial<Customer>): Promise<Customer> {
-    try {
-      const { data, error } = await supabase
-        .from('customers')
-        .update(customer)
-        .eq('id', id)
-        .select()
-        .single();
-      
-      if (error) throw error;
-      return data as Customer;
-    } catch (error) {
-      console.error('Error updating customer:', error);
-      throw error;
-    }
-  },
-  
-  // Delete a customer
-  async deleteCustomer(id: string): Promise<void> {
-    try {
-      const { error } = await supabase
-        .from('customers')
-        .delete()
-        .eq('id', id);
-      
-      if (error) throw error;
-    } catch (error) {
-      console.error('Error deleting customer:', error);
-      throw error;
-    }
   }
 };

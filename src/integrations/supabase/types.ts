@@ -9,7 +9,432 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
-      [_ in never]: never
+      customers: {
+        Row: {
+          address: string
+          createdat: string | null
+          customertype: string
+          dateofbirth: string
+          email: string
+          firstname: string
+          id: string
+          lastname: string
+          licenseexpiry: string
+          licensenumber: string
+          phone: string
+        }
+        Insert: {
+          address: string
+          createdat?: string | null
+          customertype: string
+          dateofbirth: string
+          email: string
+          firstname: string
+          id?: string
+          lastname: string
+          licenseexpiry: string
+          licensenumber: string
+          phone: string
+        }
+        Update: {
+          address?: string
+          createdat?: string | null
+          customertype?: string
+          dateofbirth?: string
+          email?: string
+          firstname?: string
+          id?: string
+          lastname?: string
+          licenseexpiry?: string
+          licensenumber?: string
+          phone?: string
+        }
+        Relationships: []
+      }
+      invoices: {
+        Row: {
+          basefee: number
+          customerid: string | null
+          damagefee: number
+          duedate: string
+          extramileagefee: number
+          fuelfee: number
+          id: string
+          insurancefee: number
+          invoicedate: string
+          latefee: number
+          rentalid: string | null
+          status: string
+          taxamount: number
+          totalamount: number
+        }
+        Insert: {
+          basefee: number
+          customerid?: string | null
+          damagefee: number
+          duedate: string
+          extramileagefee: number
+          fuelfee: number
+          id?: string
+          insurancefee: number
+          invoicedate: string
+          latefee: number
+          rentalid?: string | null
+          status: string
+          taxamount: number
+          totalamount: number
+        }
+        Update: {
+          basefee?: number
+          customerid?: string | null
+          damagefee?: number
+          duedate?: string
+          extramileagefee?: number
+          fuelfee?: number
+          id?: string
+          insurancefee?: number
+          invoicedate?: string
+          latefee?: number
+          rentalid?: string | null
+          status?: string
+          taxamount?: number
+          totalamount?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "invoices_customerid_fkey"
+            columns: ["customerid"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "invoices_rentalid_fkey"
+            columns: ["rentalid"]
+            isOneToOne: false
+            referencedRelation: "rentals"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      maintenance_records: {
+        Row: {
+          cost: number
+          description: string
+          id: string
+          maintenancedate: string
+          maintenancetype: string
+          mileage: number
+          status: string
+          technicianid: string
+          vehicleid: string | null
+        }
+        Insert: {
+          cost: number
+          description: string
+          id?: string
+          maintenancedate: string
+          maintenancetype: string
+          mileage: number
+          status: string
+          technicianid: string
+          vehicleid?: string | null
+        }
+        Update: {
+          cost?: number
+          description?: string
+          id?: string
+          maintenancedate?: string
+          maintenancetype?: string
+          mileage?: number
+          status?: string
+          technicianid?: string
+          vehicleid?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "maintenance_records_vehicleid_fkey"
+            columns: ["vehicleid"]
+            isOneToOne: false
+            referencedRelation: "vehicles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      payments: {
+        Row: {
+          amount: number
+          customerid: string | null
+          id: string
+          invoiceid: string | null
+          paymentdate: string
+          paymentmethod: string
+          processedby: string
+          status: string
+          transactionreference: string
+        }
+        Insert: {
+          amount: number
+          customerid?: string | null
+          id?: string
+          invoiceid?: string | null
+          paymentdate: string
+          paymentmethod: string
+          processedby: string
+          status: string
+          transactionreference: string
+        }
+        Update: {
+          amount?: number
+          customerid?: string | null
+          id?: string
+          invoiceid?: string | null
+          paymentdate?: string
+          paymentmethod?: string
+          processedby?: string
+          status?: string
+          transactionreference?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payments_customerid_fkey"
+            columns: ["customerid"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payments_invoiceid_fkey"
+            columns: ["invoiceid"]
+            isOneToOne: false
+            referencedRelation: "invoices"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      rentals: {
+        Row: {
+          actualreturndate: string | null
+          checkinemployeeid: string | null
+          checkoutdate: string
+          checkoutemployeeid: string
+          checkoutmileage: number
+          customerid: string | null
+          expectedreturndate: string
+          id: string
+          reservationid: string | null
+          returnmileage: number | null
+          status: string
+          vehicleid: string | null
+        }
+        Insert: {
+          actualreturndate?: string | null
+          checkinemployeeid?: string | null
+          checkoutdate: string
+          checkoutemployeeid: string
+          checkoutmileage: number
+          customerid?: string | null
+          expectedreturndate: string
+          id?: string
+          reservationid?: string | null
+          returnmileage?: number | null
+          status: string
+          vehicleid?: string | null
+        }
+        Update: {
+          actualreturndate?: string | null
+          checkinemployeeid?: string | null
+          checkoutdate?: string
+          checkoutemployeeid?: string
+          checkoutmileage?: number
+          customerid?: string | null
+          expectedreturndate?: string
+          id?: string
+          reservationid?: string | null
+          returnmileage?: number | null
+          status?: string
+          vehicleid?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "rentals_customerid_fkey"
+            columns: ["customerid"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "rentals_reservationid_fkey"
+            columns: ["reservationid"]
+            isOneToOne: false
+            referencedRelation: "reservations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "rentals_vehicleid_fkey"
+            columns: ["vehicleid"]
+            isOneToOne: false
+            referencedRelation: "vehicles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      reservations: {
+        Row: {
+          categoryid: string | null
+          customerid: string | null
+          employeeid: string
+          id: string
+          pickupdate: string
+          reservationdate: string
+          returndate: string
+          status: string
+          vehicleid: string | null
+        }
+        Insert: {
+          categoryid?: string | null
+          customerid?: string | null
+          employeeid: string
+          id?: string
+          pickupdate: string
+          reservationdate: string
+          returndate: string
+          status: string
+          vehicleid?: string | null
+        }
+        Update: {
+          categoryid?: string | null
+          customerid?: string | null
+          employeeid?: string
+          id?: string
+          pickupdate?: string
+          reservationdate?: string
+          returndate?: string
+          status?: string
+          vehicleid?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "reservations_categoryid_fkey"
+            columns: ["categoryid"]
+            isOneToOne: false
+            referencedRelation: "vehicle_categories"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "reservations_customerid_fkey"
+            columns: ["customerid"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "reservations_vehicleid_fkey"
+            columns: ["vehicleid"]
+            isOneToOne: false
+            referencedRelation: "vehicles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      users: {
+        Row: {
+          email: string
+          firstname: string
+          id: string
+          lastname: string
+          role: string
+        }
+        Insert: {
+          email: string
+          firstname: string
+          id?: string
+          lastname: string
+          role: string
+        }
+        Update: {
+          email?: string
+          firstname?: string
+          id?: string
+          lastname?: string
+          role?: string
+        }
+        Relationships: []
+      }
+      vehicle_categories: {
+        Row: {
+          baserentalrate: number
+          description: string
+          id: string
+          insurancerate: number
+          name: string
+        }
+        Insert: {
+          baserentalrate: number
+          description: string
+          id?: string
+          insurancerate: number
+          name: string
+        }
+        Update: {
+          baserentalrate?: number
+          description?: string
+          id?: string
+          insurancerate?: number
+          name?: string
+        }
+        Relationships: []
+      }
+      vehicles: {
+        Row: {
+          categoryid: string | null
+          color: string
+          id: string
+          imageurl: string | null
+          licenseplate: string
+          make: string
+          mileage: number
+          model: string
+          status: string
+          vin: string
+          year: number
+        }
+        Insert: {
+          categoryid?: string | null
+          color: string
+          id?: string
+          imageurl?: string | null
+          licenseplate: string
+          make: string
+          mileage: number
+          model: string
+          status: string
+          vin: string
+          year: number
+        }
+        Update: {
+          categoryid?: string | null
+          color?: string
+          id?: string
+          imageurl?: string | null
+          licenseplate?: string
+          make?: string
+          mileage?: number
+          model?: string
+          status?: string
+          vin?: string
+          year?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vehicles_categoryid_fkey"
+            columns: ["categoryid"]
+            isOneToOne: false
+            referencedRelation: "vehicle_categories"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never

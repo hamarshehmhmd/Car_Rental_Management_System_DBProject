@@ -1,4 +1,3 @@
-
 import React, { useEffect, useState } from 'react';
 import { CalendarClock, Car, CheckSquare } from 'lucide-react';
 import { format, addDays, isAfter } from 'date-fns';
@@ -14,7 +13,7 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
-import { Rental } from '@/types';
+import { Rental, RentalStatus } from '@/types';
 import {
   Dialog,
   DialogContent,
@@ -26,7 +25,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
-import supabase from '@/lib/supabase';
+import { supabaseService } from '@/services/supabaseService';
 
 const Rentals: React.FC = () => {
   const [rentals, setRentals] = useState<Rental[]>([]);
@@ -39,29 +38,55 @@ const Rentals: React.FC = () => {
     const fetchRentals = async () => {
       setLoading(true);
       try {
-        // In a real app, we would fetch from Supabase
-        // const { data, error } = await supabase
-        //   .from('rentals')
-        //   .select(`
-        //     *,
-        //     customers (firstName, lastName),
-        //     vehicles (make, model, year)
-        //   `);
+        // Try to fetch rentals from Supabase
+        const rentalsData = await supabaseService.getAll<Rental>('rentals');
         
-        // if (error) throw error;
-        
-        // Use mock data for now
-        setTimeout(() => {
+        // If we have rentals, fetch related customer and vehicle data and format
+        if (rentalsData && rentalsData.length > 0) {
+          const enhancedRentals = await Promise.all(rentalsData.map(async (rental) => {
+            // Try to get customer name
+            let customerName = 'Unknown Customer';
+            try {
+              const customer = await supabaseService.getById('customers', rental.customerId);
+              if (customer) {
+                customerName = `${customer.first_name} ${customer.last_name}`;
+              }
+            } catch (e) {
+              console.error('Error fetching customer for rental:', e);
+            }
+            
+            // Try to get vehicle info
+            let vehicleInfo = 'Unknown Vehicle';
+            try {
+              const vehicle = await supabaseService.getById('vehicles', rental.vehicleId);
+              if (vehicle) {
+                vehicleInfo = `${vehicle.make} ${vehicle.model} (${vehicle.year})`;
+              }
+            } catch (e) {
+              console.error('Error fetching vehicle for rental:', e);
+            }
+            
+            return {
+              ...rental,
+              customerName,
+              vehicleInfo
+            };
+          }));
+          
+          setRentals(enhancedRentals);
+        } else {
+          // Use mock data if no rentals found
           setRentals(getRentalMockData());
-          setLoading(false);
-        }, 500);
+        }
       } catch (error) {
         console.error('Error fetching rentals:', error);
         toast({
           title: 'Failed to load rentals',
-          description: 'There was an error loading the rental data.',
+          description: 'There was an error loading the rental data. Using mock data instead.',
           variant: 'destructive',
         });
+        setRentals(getRentalMockData());
+      } finally {
         setLoading(false);
       }
     };
@@ -85,39 +110,43 @@ const Rentals: React.FC = () => {
     }
   };
 
-  const handleCheckin = () => {
+  const handleCheckin = async () => {
     if (!selectedRental) return;
     
-    // In a real app, this would update the database
-    // const { error } = await supabase
-    //   .from('rentals')
-    //   .update({
-    //     status: 'completed',
-    //     actualReturnDate: new Date().toISOString(),
-    //     returnMileage: parseInt(returnMileage, 10)
-    //   })
-    //   .eq('id', selectedRental.id);
-    
-    toast({
-      title: 'Vehicle Checked In',
-      description: `Vehicle has been successfully returned.`,
-    });
-    
-    // Update local state
-    const updatedRentals = rentals.map(rental => {
-      if (rental.id === selectedRental.id) {
-        return {
-          ...rental,
-          status: 'completed',
-          actualReturnDate: new Date().toISOString(),
-          returnMileage: parseInt(returnMileage, 10)
-        };
-      }
-      return rental;
-    });
-    
-    setRentals(updatedRentals);
-    setCheckinDialogOpen(false);
+    try {
+      const returnMileageNum = parseInt(returnMileage, 10);
+      
+      // Update the rental in Supabase
+      const updatedRental = await supabaseService.update<Rental>('rentals', selectedRental.id, {
+        status: 'completed' as RentalStatus,
+        actualReturnDate: new Date().toISOString(),
+        returnMileage: returnMileageNum,
+        checkinEmployeeId: 'emp1', // In a real app, this would be the logged-in employee
+      });
+      
+      // Update local state with TypeScript-safe approach
+      setRentals(prev => 
+        prev.map(rental => 
+          rental.id === selectedRental.id 
+            ? { ...rental, ...updatedRental } as Rental
+            : rental
+        )
+      );
+      
+      toast({
+        title: 'Vehicle Checked In',
+        description: `Vehicle has been successfully returned.`,
+      });
+      
+      setCheckinDialogOpen(false);
+    } catch (error) {
+      console.error('Error checking in vehicle:', error);
+      toast({
+        title: 'Check-in Failed',
+        description: 'Could not complete the vehicle check-in.',
+        variant: 'destructive',
+      });
+    }
   };
 
   const rentalColumns = [
@@ -229,6 +258,7 @@ const Rentals: React.FC = () => {
               columns={rentalColumns}
               searchable={true}
               onRowClick={handleViewRental}
+              loading={loading}
             />
           </CardContent>
         </Card>
@@ -301,7 +331,7 @@ const Rentals: React.FC = () => {
   );
 };
 
-// Mock data for rentals
+// Mock data for rentals, typed correctly
 function getRentalMockData(): Rental[] {
   const today = new Date();
   
@@ -315,7 +345,7 @@ function getRentalMockData(): Rental[] {
       checkoutDate: format(addDays(today, -7), 'yyyy-MM-dd'),
       expectedReturnDate: format(addDays(today, 3), 'yyyy-MM-dd'),
       checkoutMileage: 12500,
-      status: 'active',
+      status: 'active' as RentalStatus,
       customerName: 'John Smith',
       vehicleInfo: 'Toyota Camry (2023)'
     },
@@ -328,7 +358,7 @@ function getRentalMockData(): Rental[] {
       checkoutDate: format(addDays(today, -14), 'yyyy-MM-dd'),
       expectedReturnDate: format(addDays(today, -7), 'yyyy-MM-dd'),
       checkoutMileage: 8700,
-      status: 'active',
+      status: 'active' as RentalStatus,
       customerName: 'Alice Johnson',
       vehicleInfo: 'Honda Civic (2024)'
     },
@@ -343,7 +373,7 @@ function getRentalMockData(): Rental[] {
       actualReturnDate: format(addDays(today, -3), 'yyyy-MM-dd'),
       checkoutMileage: 23400,
       returnMileage: 24150,
-      status: 'completed',
+      status: 'completed' as RentalStatus,
       customerName: 'Robert Davis',
       vehicleInfo: 'Ford Explorer (2022)'
     },
@@ -359,7 +389,7 @@ function getRentalMockData(): Rental[] {
       actualReturnDate: format(addDays(today, -15), 'yyyy-MM-dd'),
       checkoutMileage: 15800,
       returnMileage: 16450,
-      status: 'completed',
+      status: 'completed' as RentalStatus,
       customerName: 'Emma Wilson',
       vehicleInfo: 'Nissan Rogue (2023)'
     },
@@ -372,11 +402,12 @@ function getRentalMockData(): Rental[] {
       checkoutDate: format(addDays(today, -5), 'yyyy-MM-dd'),
       expectedReturnDate: format(addDays(today, 2), 'yyyy-MM-dd'),
       checkoutMileage: 32100,
-      status: 'active',
+      status: 'active' as RentalStatus,
       customerName: 'Michael Brown',
       vehicleInfo: 'Jeep Cherokee (2022)'
     }
   ];
 }
 
+// Export the component
 export default Rentals;
