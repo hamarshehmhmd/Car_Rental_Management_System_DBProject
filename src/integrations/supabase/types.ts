@@ -153,6 +153,13 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "maintenance_records_technicianid_fkey"
+            columns: ["technicianid"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "maintenance_records_vehicleid_fkey"
             columns: ["vehicleid"]
             isOneToOne: false
@@ -210,6 +217,13 @@ export type Database = {
             referencedRelation: "invoices"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "payments_processedby_fkey"
+            columns: ["processedby"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
         ]
       }
       rentals: {
@@ -256,6 +270,20 @@ export type Database = {
           vehicleid?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "rentals_checkinemployeeid_fkey"
+            columns: ["checkinemployeeid"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "rentals_checkoutemployeeid_fkey"
+            columns: ["checkoutemployeeid"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "rentals_customerid_fkey"
             columns: ["customerid"]
@@ -326,6 +354,13 @@ export type Database = {
             columns: ["customerid"]
             isOneToOne: false
             referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "reservations_employeeid_fkey"
+            columns: ["employeeid"]
+            isOneToOne: false
+            referencedRelation: "users"
             referencedColumns: ["id"]
           },
           {

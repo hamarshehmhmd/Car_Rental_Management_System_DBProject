@@ -2,145 +2,89 @@
 import { supabase } from '@/integrations/supabase/client';
 import { Rental, RentalStatus } from '@/types';
 import { toast } from '@/hooks/use-toast';
+import { supabaseService } from './supabaseService';
+
+// Transformer for Rental data between database and frontend
+const rentalTransformer = {
+  toFrontend: (dbRental: any): Rental => {
+    return {
+      id: dbRental.id,
+      reservationId: dbRental.reservationid,
+      customerId: dbRental.customerid,
+      vehicleId: dbRental.vehicleid,
+      checkoutEmployeeId: dbRental.checkoutemployeeid,
+      checkinEmployeeId: dbRental.checkinemployeeid,
+      checkoutDate: dbRental.checkoutdate,
+      expectedReturnDate: dbRental.expectedreturndate,
+      actualReturnDate: dbRental.actualreturndate,
+      checkoutMileage: dbRental.checkoutmileage,
+      returnMileage: dbRental.returnmileage,
+      status: dbRental.status as RentalStatus,
+      customerName: dbRental.customers ? 
+        `${dbRental.customers.firstname} ${dbRental.customers.lastname}` : undefined,
+      vehicleInfo: dbRental.vehicles ? 
+        `${dbRental.vehicles.make} ${dbRental.vehicles.model} (${dbRental.vehicles.year})` : undefined,
+    };
+  },
+  toDatabase: (rental: Partial<Rental>): Record<string, any> => {
+    const dbRental: Record<string, any> = {};
+    
+    if (rental.reservationId !== undefined) dbRental.reservationid = rental.reservationId;
+    if (rental.customerId !== undefined) dbRental.customerid = rental.customerId;
+    if (rental.vehicleId !== undefined) dbRental.vehicleid = rental.vehicleId;
+    if (rental.checkoutEmployeeId !== undefined) dbRental.checkoutemployeeid = rental.checkoutEmployeeId;
+    if (rental.checkinEmployeeId !== undefined) dbRental.checkinemployeeid = rental.checkinEmployeeId;
+    if (rental.checkoutDate !== undefined) dbRental.checkoutdate = rental.checkoutDate;
+    if (rental.expectedReturnDate !== undefined) dbRental.expectedreturndate = rental.expectedReturnDate;
+    if (rental.actualReturnDate !== undefined) dbRental.actualreturndate = rental.actualReturnDate;
+    if (rental.checkoutMileage !== undefined) dbRental.checkoutmileage = rental.checkoutMileage;
+    if (rental.returnMileage !== undefined) dbRental.returnmileage = rental.returnMileage;
+    if (rental.status !== undefined) dbRental.status = rental.status;
+    
+    return dbRental;
+  }
+};
 
 export const rentalService = {
-  // Fetch rentals from Supabase with related data
+  // Fetch rentals from Supabase with joined customer and vehicle data
   async getRentals(): Promise<Rental[]> {
     try {
       const { data, error } = await supabase
         .from('rentals')
         .select(`
           *,
-          customers (id, first_name, last_name, email),
-          vehicles (id, make, model, year, license_plate)
+          customers (firstname, lastname),
+          vehicles (make, model, year)
         `);
-      
+
       if (error) throw error;
-      
-      if (data && data.length > 0) {
-        return data.map(rental => {
-          const customer = rental.customers;
-          const vehicle = rental.vehicles;
-          
-          return {
-            id: rental.id,
-            reservationId: rental.reservation_id,
-            customerId: rental.customer_id,
-            vehicleId: rental.vehicle_id,
-            checkoutEmployeeId: rental.checkout_employee_id,
-            checkinEmployeeId: rental.checkin_employee_id,
-            checkoutDate: rental.checkout_date,
-            expectedReturnDate: rental.expected_return_date,
-            actualReturnDate: rental.actual_return_date,
-            checkoutMileage: rental.checkout_mileage,
-            returnMileage: rental.return_mileage,
-            status: rental.status as RentalStatus,
-            customerName: customer ? `${customer.first_name} ${customer.last_name}` : 'Unknown',
-            vehicleInfo: vehicle ? `${vehicle.make} ${vehicle.model} (${vehicle.year})` : 'Unknown'
-          };
-        }) as Rental[];
-      }
-      
-      // If no rentals found, return mock data
-      return rentalService.getRentalMockData();
+
+      return data.map(rentalTransformer.toFrontend);
     } catch (error) {
       console.error('Error fetching rentals:', error);
       toast({
         title: 'Error fetching rentals',
-        description: 'Could not fetch rental data. Using mock data instead.',
+        description: 'Could not fetch rental data.',
         variant: 'destructive'
       });
-      
-      return rentalService.getRentalMockData();
+      return [];
     }
   },
-  
-  // Get a single rental by ID
+
+  // Get rental by ID
   async getRentalById(id: string): Promise<Rental | null> {
     try {
-      const { data, error } = await supabase
-        .from('rentals')
-        .select(`
-          *,
-          customers (id, first_name, last_name, email),
-          vehicles (id, make, model, year, license_plate)
-        `)
-        .eq('id', id)
-        .single();
-      
-      if (error) throw error;
-      
-      if (!data) return null;
-      
-      const customer = data.customers;
-      const vehicle = data.vehicles;
-      
-      return {
-        id: data.id,
-        reservationId: data.reservation_id,
-        customerId: data.customer_id,
-        vehicleId: data.vehicle_id,
-        checkoutEmployeeId: data.checkout_employee_id,
-        checkinEmployeeId: data.checkin_employee_id,
-        checkoutDate: data.checkout_date,
-        expectedReturnDate: data.expected_return_date,
-        actualReturnDate: data.actual_return_date,
-        checkoutMileage: data.checkout_mileage,
-        returnMileage: data.return_mileage,
-        status: data.status as RentalStatus,
-        customerName: customer ? `${customer.first_name} ${customer.last_name}` : 'Unknown',
-        vehicleInfo: vehicle ? `${vehicle.make} ${vehicle.model} (${vehicle.year})` : 'Unknown'
-      };
+      return await supabaseService.getById<any, Rental>('rentals', id, rentalTransformer);
     } catch (error) {
-      console.error('Error fetching rental by ID:', error);
+      console.error('Error fetching rental:', error);
       return null;
     }
   },
-  
+
   // Create a new rental
   async createRental(rental: Partial<Rental>): Promise<Rental> {
     try {
-      const dbRental = {
-        reservation_id: rental.reservationId,
-        customer_id: rental.customerId,
-        vehicle_id: rental.vehicleId,
-        checkout_employee_id: rental.checkoutEmployeeId,
-        checkin_employee_id: rental.checkinEmployeeId,
-        checkout_date: rental.checkoutDate,
-        expected_return_date: rental.expectedReturnDate,
-        actual_return_date: rental.actualReturnDate,
-        checkout_mileage: rental.checkoutMileage,
-        return_mileage: rental.returnMileage,
-        status: rental.status
-      };
-      
-      const { data, error } = await supabase
-        .from('rentals')
-        .insert([dbRental])
-        .select()
-        .single();
-      
-      if (error) throw error;
-      
-      toast({
-        title: 'Rental created',
-        description: 'Rental has been successfully created.',
-      });
-      
-      return {
-        id: data.id,
-        reservationId: data.reservation_id,
-        customerId: data.customer_id,
-        vehicleId: data.vehicle_id,
-        checkoutEmployeeId: data.checkout_employee_id,
-        checkinEmployeeId: data.checkin_employee_id,
-        checkoutDate: data.checkout_date,
-        expectedReturnDate: data.expected_return_date,
-        actualReturnDate: data.actual_return_date,
-        checkoutMileage: data.checkout_mileage,
-        returnMileage: data.return_mileage,
-        status: data.status as RentalStatus
-      };
+      return await supabaseService.create<any, Rental>('rentals', rental, rentalTransformer);
     } catch (error) {
       console.error('Error creating rental:', error);
       toast({
@@ -151,52 +95,11 @@ export const rentalService = {
       throw error;
     }
   },
-  
+
   // Update an existing rental
   async updateRental(id: string, rental: Partial<Rental>): Promise<Rental> {
     try {
-      const dbRental: Record<string, any> = {};
-      
-      if (rental.reservationId) dbRental.reservation_id = rental.reservationId;
-      if (rental.customerId) dbRental.customer_id = rental.customerId;
-      if (rental.vehicleId) dbRental.vehicle_id = rental.vehicleId;
-      if (rental.checkoutEmployeeId) dbRental.checkout_employee_id = rental.checkoutEmployeeId;
-      if (rental.checkinEmployeeId) dbRental.checkin_employee_id = rental.checkinEmployeeId;
-      if (rental.checkoutDate) dbRental.checkout_date = rental.checkoutDate;
-      if (rental.expectedReturnDate) dbRental.expected_return_date = rental.expectedReturnDate;
-      if (rental.actualReturnDate) dbRental.actual_return_date = rental.actualReturnDate;
-      if (rental.checkoutMileage) dbRental.checkout_mileage = rental.checkoutMileage;
-      if (rental.returnMileage) dbRental.return_mileage = rental.returnMileage;
-      if (rental.status) dbRental.status = rental.status;
-      
-      const { data, error } = await supabase
-        .from('rentals')
-        .update(dbRental)
-        .eq('id', id)
-        .select()
-        .single();
-      
-      if (error) throw error;
-      
-      toast({
-        title: 'Rental updated',
-        description: 'Rental has been successfully updated.',
-      });
-      
-      return {
-        id: data.id,
-        reservationId: data.reservation_id,
-        customerId: data.customer_id,
-        vehicleId: data.vehicle_id,
-        checkoutEmployeeId: data.checkout_employee_id,
-        checkinEmployeeId: data.checkin_employee_id,
-        checkoutDate: data.checkout_date,
-        expectedReturnDate: data.expected_return_date,
-        actualReturnDate: data.actual_return_date,
-        checkoutMileage: data.checkout_mileage,
-        returnMileage: data.return_mileage,
-        status: data.status as RentalStatus
-      };
+      return await supabaseService.update<any, Rental>('rentals', id, rental, rentalTransformer);
     } catch (error) {
       console.error('Error updating rental:', error);
       toast({
@@ -207,16 +110,11 @@ export const rentalService = {
       throw error;
     }
   },
-  
+
   // Delete a rental
   async deleteRental(id: string): Promise<void> {
     try {
-      const { error } = await supabase
-        .from('rentals')
-        .delete()
-        .eq('id', id);
-      
-      if (error) throw error;
+      await supabaseService.delete('rentals', id);
       
       toast({
         title: 'Rental deleted',
@@ -231,91 +129,5 @@ export const rentalService = {
       });
       throw error;
     }
-  },
-  
-  // Mock data as fallback
-  getRentalMockData(): Rental[] {
-    return [
-      {
-        id: 'r-1',
-        reservationId: 'res-1',
-        customerId: 'c-1',
-        vehicleId: 'v-1',
-        checkoutEmployeeId: 'e-1',
-        checkinEmployeeId: null,
-        checkoutDate: '2023-04-01T10:30:00Z',
-        expectedReturnDate: '2023-04-05T10:30:00Z',
-        actualReturnDate: null,
-        checkoutMileage: 15600,
-        returnMileage: null,
-        status: 'active',
-        customerName: 'John Smith',
-        vehicleInfo: 'Toyota Camry (2022)'
-      },
-      {
-        id: 'r-2',
-        reservationId: 'res-2',
-        customerId: 'c-2',
-        vehicleId: 'v-2',
-        checkoutEmployeeId: 'e-2',
-        checkinEmployeeId: 'e-1',
-        checkoutDate: '2023-03-28T14:15:00Z',
-        expectedReturnDate: '2023-03-31T14:15:00Z',
-        actualReturnDate: '2023-03-31T16:30:00Z',
-        checkoutMileage: 8200,
-        returnMileage: 8750,
-        status: 'completed',
-        customerName: 'Emily Johnson',
-        vehicleInfo: 'Honda CR-V (2023)'
-      },
-      {
-        id: 'r-3',
-        reservationId: 'res-3',
-        customerId: 'c-3',
-        vehicleId: 'v-3',
-        checkoutEmployeeId: 'e-1',
-        checkinEmployeeId: null,
-        checkoutDate: '2023-04-02T09:45:00Z',
-        expectedReturnDate: '2023-04-04T09:45:00Z',
-        actualReturnDate: null,
-        checkoutMileage: 20300,
-        returnMileage: null,
-        status: 'active',
-        customerName: 'Michael Brown',
-        vehicleInfo: 'Ford Mustang (2021)'
-      },
-      {
-        id: 'r-4',
-        reservationId: 'res-4',
-        customerId: 'c-4',
-        vehicleId: 'v-4',
-        checkoutEmployeeId: 'e-2',
-        checkinEmployeeId: null,
-        checkoutDate: '2023-03-30T11:20:00Z',
-        expectedReturnDate: '2023-04-02T11:20:00Z',
-        actualReturnDate: null,
-        checkoutMileage: 12400,
-        returnMileage: null,
-        status: 'overdue',
-        customerName: 'Sarah Davis',
-        vehicleInfo: 'Chevrolet Equinox (2022)'
-      },
-      {
-        id: 'r-5',
-        reservationId: 'res-5',
-        customerId: 'c-5',
-        vehicleId: 'v-5',
-        checkoutEmployeeId: 'e-1',
-        checkinEmployeeId: 'e-2',
-        checkoutDate: '2023-03-25T13:00:00Z',
-        expectedReturnDate: '2023-03-29T13:00:00Z',
-        actualReturnDate: '2023-03-29T15:45:00Z',
-        checkoutMileage: 5600,
-        returnMileage: 6200,
-        status: 'completed',
-        customerName: 'Robert Wilson',
-        vehicleInfo: 'BMW 3 Series (2023)'
-      }
-    ];
   }
 };

@@ -6,6 +6,7 @@ import { toast } from '@/hooks/use-toast';
 import PageHeader from '@/components/PageHeader';
 import DataTable from '@/components/DataTable';
 import StatusBadge from '@/components/StatusBadge';
+import CarLogo from '@/components/CarLogo';
 import { Button } from '@/components/ui/button';
 import {
   Card,
@@ -128,11 +129,12 @@ const Vehicles: React.FC = () => {
       header: 'Make',
       cell: (vehicle: Vehicle) => (
         <div className="flex items-center gap-2">
-          <div className="w-10 h-10 rounded-full overflow-hidden bg-gray-200">
-            <img 
-              src={vehicle.imageUrl || 'https://source.unsplash.com/random/800x600/?car'} 
-              alt={`${vehicle.make} ${vehicle.model}`}
-              className="w-full h-full object-cover"
+          <div className="w-10 h-10 rounded-full overflow-hidden bg-gray-100 flex items-center justify-center">
+            <CarLogo 
+              make={vehicle.make} 
+              model={vehicle.model}
+              className="w-8 h-8 object-contain"
+              fallbackClassName="w-6 h-6 text-gray-400"
             />
           </div>
           <span className="font-medium">{vehicle.make}</span>
