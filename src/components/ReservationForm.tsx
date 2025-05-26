@@ -28,14 +28,16 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { Reservation, Customer, VehicleCategory } from '@/types';
+import { Reservation, Customer, Vehicle } from '@/types';
 import { reservationService } from '@/services/reservationService';
 import { customerService } from '@/services/customerService';
+import { rentalService } from '@/services/rentalService';
+import { invoiceService } from '@/services/invoiceService';
 import { supabase } from '@/integrations/supabase/client';
 
 const formSchema = z.object({
   customerId: z.string().min(1, 'Customer is required'),
-  categoryId: z.string().min(1, 'Vehicle category is required'),
+  vehicleId: z.string().min(1, 'Vehicle is required'),
   pickupDate: z.string().min(1, 'Pickup date is required'),
   returnDate: z.string().min(1, 'Return date is required'),
 });
@@ -54,14 +56,14 @@ const ReservationForm: React.FC<ReservationFormProps> = ({
   onSuccess,
 }) => {
   const [customers, setCustomers] = useState<Customer[]>([]);
-  const [categories, setCategories] = useState<VehicleCategory[]>([]);
+  const [availableVehicles, setAvailableVehicles] = useState<Vehicle[]>([]);
   const [loading, setLoading] = useState(false);
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: {
       customerId: reservation?.customerId || '',
-      categoryId: reservation?.categoryId || '',
+      vehicleId: reservation?.vehicleId || '',
       pickupDate: reservation?.pickupDate ? reservation.pickupDate.split('T')[0] : '',
       returnDate: reservation?.returnDate ? reservation.returnDate.split('T')[0] : '',
     },
@@ -70,26 +72,32 @@ const ReservationForm: React.FC<ReservationFormProps> = ({
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [customersData, categoriesData] = await Promise.all([
+        const [customersData, vehiclesData] = await Promise.all([
           customerService.getCustomers(),
-          supabase.from('vehicle_categories').select('*'),
+          supabase.from('vehicles').select('*').eq('status', 'available'),
         ]);
 
         setCustomers(customersData);
-        if (categoriesData.data) {
-          setCategories(categoriesData.data.map(cat => ({
-            id: cat.id,
-            name: cat.name,
-            description: cat.description,
-            baseRentalRate: cat.baserentalrate,
-            insuranceRate: cat.insurancerate,
+        if (vehiclesData.data) {
+          setAvailableVehicles(vehiclesData.data.map(vehicle => ({
+            id: vehicle.id,
+            vin: vehicle.vin,
+            make: vehicle.make,
+            model: vehicle.model,
+            year: vehicle.year,
+            color: vehicle.color,
+            licensePlate: vehicle.licenseplate,
+            mileage: vehicle.mileage,
+            status: vehicle.status,
+            categoryId: vehicle.categoryid,
+            imageUrl: vehicle.imageurl,
           })));
         }
       } catch (error) {
         console.error('Error fetching form data:', error);
         toast({
           title: 'Error loading form data',
-          description: 'Could not load customers and categories.',
+          description: 'Could not load customers and vehicles.',
           variant: 'destructive',
         });
       }
@@ -103,30 +111,82 @@ const ReservationForm: React.FC<ReservationFormProps> = ({
   const onSubmit = async (values: z.infer<typeof formSchema>) => {
     setLoading(true);
     try {
+      const selectedVehicle = availableVehicles.find(v => v.id === values.vehicleId);
+      if (!selectedVehicle) {
+        throw new Error('Selected vehicle not found');
+      }
+
+      // Step 1: Create the reservation
       const reservationData = {
         customerId: values.customerId,
-        categoryId: values.categoryId,
+        categoryId: selectedVehicle.categoryId,
+        vehicleId: values.vehicleId,
         pickupDate: new Date(values.pickupDate).toISOString(),
         returnDate: new Date(values.returnDate).toISOString(),
         reservationDate: new Date().toISOString(),
-        status: 'pending' as const,
-        employeeId: '550e8400-e29b-41d4-a716-446655440000', // Temporary UUID
-        vehicleId: null,
+        status: 'confirmed' as const,
+        employeeId: null,
       };
 
+      let createdReservation;
       if (reservation) {
-        await reservationService.updateReservation(reservation.id, reservationData);
-        toast({
-          title: 'Reservation Updated',
-          description: 'The reservation has been successfully updated.',
-        });
+        createdReservation = await reservationService.updateReservation(reservation.id, reservationData);
       } else {
-        await reservationService.createReservation(reservationData);
-        toast({
-          title: 'Reservation Created',
-          description: 'The reservation has been successfully created.',
-        });
+        createdReservation = await reservationService.createReservation(reservationData);
       }
+
+      // Step 2: Update vehicle status to reserved
+      await supabase
+        .from('vehicles')
+        .update({ status: 'reserved' })
+        .eq('id', values.vehicleId);
+
+      // Step 3: Create rental automatically
+      const rentalData = {
+        reservationId: createdReservation.id,
+        customerId: values.customerId,
+        vehicleId: values.vehicleId,
+        checkoutDate: new Date(values.pickupDate).toISOString(),
+        expectedReturnDate: new Date(values.returnDate).toISOString(),
+        checkoutMileage: selectedVehicle.mileage,
+        status: 'active' as const,
+        checkoutEmployeeId: null,
+      };
+
+      const createdRental = await rentalService.createRental(rentalData);
+
+      // Step 4: Create invoice with fixed pricing
+      const pickupDate = new Date(values.pickupDate);
+      const returnDate = new Date(values.returnDate);
+      const rentalDays = Math.ceil((returnDate.getTime() - pickupDate.getTime()) / (1000 * 60 * 60 * 24));
+      
+      const baseFee = rentalDays * 50; // $50 per day
+      const insuranceFee = rentalDays * 15; // $15 per day
+      const taxAmount = (baseFee + insuranceFee) * 0.13; // 13% tax
+      const totalAmount = baseFee + insuranceFee + taxAmount;
+
+      const invoiceData = {
+        rentalId: createdRental.id,
+        customerId: values.customerId,
+        invoiceDate: new Date().toISOString(),
+        dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(), // 30 days from now
+        baseFee,
+        insuranceFee,
+        extraMileageFee: 0,
+        fuelFee: 0,
+        damageFee: 0,
+        lateFee: 0,
+        taxAmount,
+        totalAmount,
+        status: 'issued' as const,
+      };
+
+      await invoiceService.createInvoice(invoiceData);
+
+      toast({
+        title: reservation ? 'Reservation Updated' : 'Reservation Created',
+        description: `The reservation, rental, and invoice have been successfully ${reservation ? 'updated' : 'created'}.`,
+      });
 
       onSuccess();
       onOpenChange(false);
@@ -135,7 +195,7 @@ const ReservationForm: React.FC<ReservationFormProps> = ({
       console.error('Error saving reservation:', error);
       toast({
         title: 'Error',
-        description: 'Could not save the reservation.',
+        description: 'Could not complete the reservation process.',
         variant: 'destructive',
       });
     } finally {
@@ -153,7 +213,7 @@ const ReservationForm: React.FC<ReservationFormProps> = ({
           <DialogDescription>
             {reservation 
               ? 'Update the reservation details below.'
-              : 'Fill out the form to create a new reservation.'
+              : 'Select a customer and available vehicle to create a complete reservation with rental and invoice.'
             }
           </DialogDescription>
         </DialogHeader>
@@ -187,20 +247,20 @@ const ReservationForm: React.FC<ReservationFormProps> = ({
 
             <FormField
               control={form.control}
-              name="categoryId"
+              name="vehicleId"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Vehicle Category</FormLabel>
+                  <FormLabel>Available Vehicle</FormLabel>
                   <Select onValueChange={field.onChange} defaultValue={field.value}>
                     <FormControl>
                       <SelectTrigger>
-                        <SelectValue placeholder="Select a category" />
+                        <SelectValue placeholder="Select an available vehicle" />
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
-                      {categories.map((category) => (
-                        <SelectItem key={category.id} value={category.id}>
-                          {category.name}
+                      {availableVehicles.map((vehicle) => (
+                        <SelectItem key={vehicle.id} value={vehicle.id}>
+                          {vehicle.year} {vehicle.make} {vehicle.model} - {vehicle.color} ({vehicle.licensePlate})
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -238,6 +298,15 @@ const ReservationForm: React.FC<ReservationFormProps> = ({
               )}
             />
 
+            <div className="bg-gray-50 p-4 rounded-lg">
+              <h4 className="font-medium text-sm text-gray-700 mb-2">What happens when you create this reservation:</h4>
+              <ul className="text-xs text-gray-600 space-y-1">
+                <li>• Vehicle will be marked as reserved</li>
+                <li>• Rental record will be automatically created</li>
+                <li>• Invoice will be generated with fixed pricing ($50/day + $15/day insurance + 13% tax)</li>
+              </ul>
+            </div>
+
             <div className="flex justify-end space-x-2 pt-4">
               <Button
                 type="button"
@@ -247,7 +316,7 @@ const ReservationForm: React.FC<ReservationFormProps> = ({
                 Cancel
               </Button>
               <Button type="submit" disabled={loading}>
-                {loading ? 'Saving...' : reservation ? 'Update' : 'Create'}
+                {loading ? 'Processing...' : reservation ? 'Update' : 'Create Reservation'}
               </Button>
             </div>
           </form>

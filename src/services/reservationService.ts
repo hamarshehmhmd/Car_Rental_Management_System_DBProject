@@ -91,12 +91,12 @@ export const reservationService = {
           try {
             const { data: vehicle } = await supabase
               .from('vehicles')
-              .select('make, model, year')
+              .select('make, model, year, licenseplate')
               .eq('id', reservation.vehicleid)
               .maybeSingle();
               
             if (vehicle) {
-              reservationRecord.vehicleInfo = `${vehicle.make} ${vehicle.model} (${vehicle.year})`;
+              reservationRecord.vehicleInfo = `${vehicle.make} ${vehicle.model} (${vehicle.year}) - ${vehicle.licenseplate}`;
             }
           } catch (e) {
             console.error('Error fetching vehicle for reservation:', e);
@@ -119,34 +119,44 @@ export const reservationService = {
   },
   
   async createReservation(reservation: Partial<Reservation>): Promise<Reservation> {
-    // Create a default employee ID if not provided
-    if (!reservation.employeeId) {
-      const { data: existingUsers } = await supabase
-        .from('users')
-        .select('id')
-        .limit(1);
-      
-      if (!existingUsers || existingUsers.length === 0) {
-        // Create a default user for operations
-        const { data: newUser, error: userError } = await supabase
+    try {
+      // Create a default employee ID if not provided
+      if (!reservation.employeeId) {
+        const { data: existingUsers } = await supabase
           .from('users')
-          .insert({
-            firstname: 'System',
-            lastname: 'Admin',
-            email: 'admin@system.com',
-            role: 'admin'
-          })
-          .select()
-          .single();
+          .select('id')
+          .limit(1);
         
-        if (userError) throw userError;
-        reservation.employeeId = newUser.id;
-      } else {
-        reservation.employeeId = existingUsers[0].id;
+        if (!existingUsers || existingUsers.length === 0) {
+          // Create a default user for operations
+          const { data: newUser, error: userError } = await supabase
+            .from('users')
+            .insert({
+              firstname: 'System',
+              lastname: 'Admin',
+              email: 'admin@system.com',
+              role: 'admin'
+            })
+            .select()
+            .single();
+          
+          if (userError) throw userError;
+          reservation.employeeId = newUser.id;
+        } else {
+          reservation.employeeId = existingUsers[0].id;
+        }
       }
+      
+      return await supabaseService.create('reservations', reservation, reservationTransformer);
+    } catch (error) {
+      console.error('Error creating reservation:', error);
+      toast({
+        title: 'Error creating reservation',
+        description: 'Could not create the reservation.',
+        variant: 'destructive'
+      });
+      throw error;
     }
-    
-    return await supabaseService.create('reservations', reservation, reservationTransformer);
   },
   
   async updateReservation(id: string, reservation: Partial<Reservation>): Promise<Reservation> {
@@ -155,14 +165,29 @@ export const reservationService = {
   
   async deleteReservation(id: string): Promise<void> {
     try {
-      // First, delete any associated rentals and their invoices
+      // First, get the reservation to find the vehicle ID
+      const { data: reservation } = await supabase
+        .from('reservations')
+        .select('vehicleid')
+        .eq('id', id)
+        .single();
+      
+      // Delete any associated rentals and their invoices
       const { data: rentals } = await supabase
         .from('rentals')
         .select('id')
         .eq('reservationid', id);
       
       if (rentals && rentals.length > 0) {
-        // Delete invoices first
+        // Delete payments first
+        for (const rental of rentals) {
+          await supabase
+            .from('payments')
+            .delete()
+            .eq('invoiceid', rental.id);
+        }
+        
+        // Delete invoices
         for (const rental of rentals) {
           await supabase
             .from('invoices')
@@ -175,6 +200,14 @@ export const reservationService = {
           .from('rentals')
           .delete()
           .eq('reservationid', id);
+      }
+      
+      // If there's a vehicle associated, set it back to available
+      if (reservation && reservation.vehicleid) {
+        await supabase
+          .from('vehicles')
+          .update({ status: 'available' })
+          .eq('id', reservation.vehicleid);
       }
       
       // Finally delete the reservation
