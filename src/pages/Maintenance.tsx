@@ -16,44 +16,65 @@ import {
 import { MaintenanceRecord } from '@/types';
 import { maintenanceService } from '@/services/maintenanceService';
 import { safeFormatDate } from '@/utils/dateUtils';
+import MaintenanceForm from '@/components/MaintenanceForm';
 
 const Maintenance: React.FC = () => {
   const [maintenanceRecords, setMaintenanceRecords] = useState<MaintenanceRecord[]>([]);
   const [loading, setLoading] = useState(true);
+  const [formOpen, setFormOpen] = useState(false);
+  const [selectedRecord, setSelectedRecord] = useState<MaintenanceRecord | undefined>();
+
+  const fetchMaintenanceRecords = async () => {
+    setLoading(true);
+    try {
+      const records = await maintenanceService.getMaintenanceRecords();
+      setMaintenanceRecords(records);
+    } catch (error) {
+      console.error('Error fetching maintenance records:', error);
+      toast({
+        title: 'Failed to load maintenance records',
+        description: 'There was an error loading the maintenance data.',
+        variant: 'destructive',
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    const fetchMaintenanceRecords = async () => {
-      setLoading(true);
-      try {
-        const records = await maintenanceService.getMaintenanceRecords();
-        setMaintenanceRecords(records);
-      } catch (error) {
-        console.error('Error fetching maintenance records:', error);
-        toast({
-          title: 'Failed to load maintenance records',
-          description: 'There was an error loading the maintenance data.',
-          variant: 'destructive',
-        });
-      } finally {
-        setLoading(false);
-      }
-    };
-
     fetchMaintenanceRecords();
   }, []);
 
   const handleAddMaintenance = () => {
-    toast({
-      title: 'Feature Coming Soon',
-      description: 'Add maintenance functionality will be available soon.',
-    });
+    setSelectedRecord(undefined);
+    setFormOpen(true);
   };
 
-  const handleViewMaintenance = (record: MaintenanceRecord) => {
-    toast({
-      title: 'Maintenance Record Selected',
-      description: `Selected ${record.maintenanceType} for ${record.vehicleInfo}`,
-    });
+  const handleEditMaintenance = (record: MaintenanceRecord) => {
+    setSelectedRecord(record);
+    setFormOpen(true);
+  };
+
+  const handleDeleteMaintenance = async (record: MaintenanceRecord) => {
+    try {
+      await maintenanceService.deleteMaintenanceRecord(record.id);
+      setMaintenanceRecords(prev => prev.filter(r => r.id !== record.id));
+      toast({
+        title: 'Maintenance Record Deleted',
+        description: `Maintenance record for ${record.vehicleInfo} has been deleted.`,
+      });
+    } catch (error) {
+      console.error('Error deleting maintenance record:', error);
+      toast({
+        title: 'Delete Failed',
+        description: 'Could not delete the maintenance record.',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const handleFormSuccess = () => {
+    fetchMaintenanceRecords();
   };
 
   const maintenanceColumns = [
@@ -115,6 +136,34 @@ const Maintenance: React.FC = () => {
         <StatusBadge status={record.status} type="maintenance" />
       ),
     },
+    {
+      key: 'actions',
+      header: 'Actions',
+      cell: (record: MaintenanceRecord) => (
+        <div className="flex gap-2">
+          <Button 
+            variant="outline" 
+            size="sm"
+            onClick={(e) => {
+              e.stopPropagation();
+              handleEditMaintenance(record);
+            }}
+          >
+            Edit
+          </Button>
+          <Button 
+            variant="destructive" 
+            size="sm"
+            onClick={(e) => {
+              e.stopPropagation();
+              handleDeleteMaintenance(record);
+            }}
+          >
+            Delete
+          </Button>
+        </div>
+      ),
+    },
   ];
 
   return (
@@ -144,12 +193,18 @@ const Maintenance: React.FC = () => {
               data={maintenanceRecords}
               columns={maintenanceColumns}
               searchable={true}
-              onRowClick={handleViewMaintenance}
               loading={loading}
             />
           </CardContent>
         </Card>
       </div>
+
+      <MaintenanceForm
+        record={selectedRecord}
+        open={formOpen}
+        onOpenChange={setFormOpen}
+        onSuccess={handleFormSuccess}
+      />
     </div>
   );
 };

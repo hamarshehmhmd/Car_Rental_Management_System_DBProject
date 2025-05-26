@@ -1,3 +1,4 @@
+
 import React, { useEffect, useState } from 'react';
 import { CalendarClock, Car, CheckSquare } from 'lucide-react';
 import { format, addDays, isAfter, parseISO } from 'date-fns';
@@ -25,7 +26,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
-import { supabase } from '@/integrations/supabase/client';
+import { rentalService } from '@/services/rentalService';
 
 // Helper function to safely format dates that might be invalid
 const safeFormatDate = (dateString: string | undefined, fallback: string): string => {
@@ -38,45 +39,6 @@ const safeFormatDate = (dateString: string | undefined, fallback: string): strin
   }
 };
 
-// Transformer for Rental data
-const rentalTransformer = {
-  toFrontend: (dbRental: any): Rental => {
-    return {
-      id: dbRental.id,
-      reservationId: dbRental.reservationid || '',
-      customerId: dbRental.customerid || '',
-      vehicleId: dbRental.vehicleid || '',
-      checkoutEmployeeId: dbRental.checkoutemployeeid || '',
-      checkinEmployeeId: dbRental.checkinemployeeid || '',
-      checkoutDate: dbRental.checkoutdate,
-      expectedReturnDate: dbRental.expectedreturndate,
-      actualReturnDate: dbRental.actualreturndate,
-      checkoutMileage: dbRental.checkoutmileage || 0,
-      returnMileage: dbRental.returnmileage,
-      status: dbRental.status as RentalStatus,
-      customerName: dbRental.customerName || 'Unknown Customer',
-      vehicleInfo: dbRental.vehicleInfo || 'Unknown Vehicle'
-    };
-  },
-  toDatabase: (rental: Partial<Rental>): Record<string, any> => {
-    const dbRental: Record<string, any> = {};
-    
-    if (rental.reservationId) dbRental.reservationid = rental.reservationId;
-    if (rental.customerId) dbRental.customerid = rental.customerId;
-    if (rental.vehicleId) dbRental.vehicleid = rental.vehicleId;
-    if (rental.checkoutEmployeeId) dbRental.checkoutemployeeid = rental.checkoutEmployeeId;
-    if (rental.checkinEmployeeId) dbRental.checkinemployeeid = rental.checkinEmployeeId;
-    if (rental.checkoutDate) dbRental.checkoutdate = rental.checkoutDate;
-    if (rental.expectedReturnDate) dbRental.expectedreturndate = rental.expectedReturnDate;
-    if (rental.actualReturnDate) dbRental.actualreturndate = rental.actualReturnDate;
-    if (rental.checkoutMileage !== undefined) dbRental.checkoutmileage = rental.checkoutMileage;
-    if (rental.returnMileage !== undefined) dbRental.returnmileage = rental.returnMileage;
-    if (rental.status) dbRental.status = rental.status;
-    
-    return dbRental;
-  }
-};
-
 const Rentals: React.FC = () => {
   const [rentals, setRentals] = useState<Rental[]>([]);
   const [loading, setLoading] = useState(true);
@@ -84,72 +46,24 @@ const Rentals: React.FC = () => {
   const [checkinDialogOpen, setCheckinDialogOpen] = useState(false);
   const [returnMileage, setReturnMileage] = useState('');
 
-  useEffect(() => {
-    const fetchRentals = async () => {
-      setLoading(true);
-      try {
-        // First, get all rentals
-        const { data: rentalData, error } = await supabase
-          .from('rentals')
-          .select('*');
-          
-        if (error) throw error;
-        
-        // Convert to frontend model and enhance with related data
-        const rentals = await Promise.all((rentalData || []).map(async (rental) => {
-          const rentalModel = rentalTransformer.toFrontend(rental);
-          
-          // Get customer name
-          if (rental.customerid) {
-            try {
-              const { data: customer } = await supabase
-                .from('customers')
-                .select('firstname, lastname')
-                .eq('id', rental.customerid)
-                .maybeSingle();
-                
-              if (customer) {
-                rentalModel.customerName = `${customer.firstname} ${customer.lastname}`;
-              }
-            } catch (e) {
-              console.error('Error fetching customer for rental:', e);
-            }
-          }
-          
-          // Get vehicle info
-          if (rental.vehicleid) {
-            try {
-              const { data: vehicle } = await supabase
-                .from('vehicles')
-                .select('make, model, year')
-                .eq('id', rental.vehicleid)
-                .maybeSingle();
-                
-              if (vehicle) {
-                rentalModel.vehicleInfo = `${vehicle.make} ${vehicle.model} (${vehicle.year})`;
-              }
-            } catch (e) {
-              console.error('Error fetching vehicle for rental:', e);
-            }
-          }
-          
-          return rentalModel;
-        }));
-        
-        setRentals(rentals);
-      } catch (error) {
-        console.error('Error fetching rentals:', error);
-        toast({
-          title: 'Failed to load rentals',
-          description: 'There was an error loading the rental data.',
-          variant: 'destructive',
-        });
-        setRentals([]);
-      } finally {
-        setLoading(false);
-      }
-    };
+  const fetchRentals = async () => {
+    setLoading(true);
+    try {
+      const data = await rentalService.getRentals();
+      setRentals(data);
+    } catch (error) {
+      console.error('Error fetching rentals:', error);
+      toast({
+        title: 'Failed to load rentals',
+        description: 'There was an error loading the rental data.',
+        variant: 'destructive',
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
 
+  useEffect(() => {
     fetchRentals();
   }, []);
 
@@ -175,32 +89,21 @@ const Rentals: React.FC = () => {
     try {
       const returnMileageNum = parseInt(returnMileage, 10);
       
-      // Update the rental in Supabase
-      const dbRental = {
-        status: 'completed',
-        actualreturndate: new Date().toISOString(),
-        returnmileage: returnMileageNum,
-        checkinemployeeid: 'emp1', // In a real app, this would be the logged-in employee
-      };
+      // Generate a proper UUID for the checkin employee - in a real app this would be the logged-in user
+      const tempEmployeeId = '550e8400-e29b-41d4-a716-446655440000'; // Temporary UUID
       
-      const { data, error } = await supabase
-        .from('rentals')
-        .update(dbRental)
-        .eq('id', selectedRental.id)
-        .select()
-        .single();
-        
-      if (error) throw error;
+      const updatedRental = await rentalService.updateRental(selectedRental.id, {
+        status: 'completed',
+        actualReturnDate: new Date().toISOString(),
+        returnMileage: returnMileageNum,
+        checkinEmployeeId: tempEmployeeId,
+      });
       
       // Update local state
-      const updatedRental = rentalTransformer.toFrontend(data);
-      updatedRental.customerName = selectedRental.customerName;
-      updatedRental.vehicleInfo = selectedRental.vehicleInfo;
-      
       setRentals(prev => 
         prev.map(rental => 
           rental.id === selectedRental.id 
-            ? updatedRental
+            ? { ...updatedRental, customerName: selectedRental.customerName, vehicleInfo: selectedRental.vehicleInfo }
             : rental
         )
       );
@@ -216,6 +119,24 @@ const Rentals: React.FC = () => {
       toast({
         title: 'Check-in Failed',
         description: 'Could not complete the vehicle check-in.',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const handleDeleteRental = async (rental: Rental) => {
+    try {
+      await rentalService.deleteRental(rental.id);
+      setRentals(prev => prev.filter(r => r.id !== rental.id));
+      toast({
+        title: 'Rental Deleted',
+        description: `Rental for ${rental.customerName} has been deleted.`,
+      });
+    } catch (error) {
+      console.error('Error deleting rental:', error);
+      toast({
+        title: 'Delete Failed',
+        description: 'Could not delete the rental.',
         variant: 'destructive',
       });
     }
@@ -295,7 +216,7 @@ const Rentals: React.FC = () => {
       key: 'actions',
       header: 'Actions',
       cell: (rental: Rental) => (
-        <div>
+        <div className="flex gap-2">
           {rental.status === 'active' && (
             <Button 
               variant="outline" 
@@ -309,6 +230,16 @@ const Rentals: React.FC = () => {
               Check In
             </Button>
           )}
+          <Button 
+            variant="destructive" 
+            size="sm"
+            onClick={(e) => {
+              e.stopPropagation();
+              handleDeleteRental(rental);
+            }}
+          >
+            Delete
+          </Button>
         </div>
       ),
     },

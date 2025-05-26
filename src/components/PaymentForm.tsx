@@ -1,0 +1,278 @@
+
+import React, { useState, useEffect } from 'react';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import * as z from 'zod';
+import { toast } from '@/hooks/use-toast';
+import { Button } from '@/components/ui/button';
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from '@/components/ui/form';
+import { Input } from '@/components/ui/input';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { Payment, Invoice, Customer } from '@/types';
+import { paymentService } from '@/services/paymentService';
+import { invoiceService } from '@/services/invoiceService';
+import { customerService } from '@/services/customerService';
+
+const formSchema = z.object({
+  invoiceId: z.string().min(1, 'Invoice is required'),
+  customerId: z.string().min(1, 'Customer is required'),
+  amount: z.string().min(1, 'Amount is required'),
+  paymentMethod: z.enum(['credit', 'debit', 'cash', 'bank_transfer']),
+  transactionReference: z.string().min(1, 'Transaction reference is required'),
+});
+
+interface PaymentFormProps {
+  payment?: Payment;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onSuccess: () => void;
+}
+
+const PaymentForm: React.FC<PaymentFormProps> = ({
+  payment,
+  open,
+  onOpenChange,
+  onSuccess,
+}) => {
+  const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [customers, setCustomers] = useState<Customer[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  const form = useForm<z.infer<typeof formSchema>>({
+    resolver: zodResolver(formSchema),
+    defaultValues: {
+      invoiceId: payment?.invoiceId || '',
+      customerId: payment?.customerId || '',
+      amount: payment?.amount?.toString() || '',
+      paymentMethod: payment?.paymentMethod || 'credit',
+      transactionReference: payment?.transactionReference || '',
+    },
+  });
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const [invoicesData, customersData] = await Promise.all([
+          invoiceService.getInvoices(),
+          customerService.getCustomers(),
+        ]);
+
+        setInvoices(invoicesData);
+        setCustomers(customersData);
+      } catch (error) {
+        console.error('Error fetching form data:', error);
+        toast({
+          title: 'Error loading form data',
+          description: 'Could not load invoices and customers.',
+          variant: 'destructive',
+        });
+      }
+    };
+
+    if (open) {
+      fetchData();
+    }
+  }, [open]);
+
+  const onSubmit = async (values: z.infer<typeof formSchema>) => {
+    setLoading(true);
+    try {
+      const paymentData = {
+        invoiceId: values.invoiceId,
+        customerId: values.customerId,
+        paymentDate: new Date().toISOString(),
+        amount: parseFloat(values.amount),
+        paymentMethod: values.paymentMethod,
+        transactionReference: values.transactionReference,
+        status: 'completed' as const,
+        processedBy: '550e8400-e29b-41d4-a716-446655440000', // Temporary UUID
+      };
+
+      if (payment) {
+        await paymentService.updatePayment(payment.id, paymentData);
+        toast({
+          title: 'Payment Updated',
+          description: 'The payment has been successfully updated.',
+        });
+      } else {
+        await paymentService.createPayment(paymentData);
+        toast({
+          title: 'Payment Created',
+          description: 'The payment has been successfully created.',
+        });
+      }
+
+      onSuccess();
+      onOpenChange(false);
+      form.reset();
+    } catch (error) {
+      console.error('Error saving payment:', error);
+      toast({
+        title: 'Error',
+        description: 'Could not save the payment.',
+        variant: 'destructive',
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-[500px]">
+        <DialogHeader>
+          <DialogTitle>
+            {payment ? 'Edit Payment' : 'Create New Payment'}
+          </DialogTitle>
+          <DialogDescription>
+            {payment 
+              ? 'Update the payment details below.'
+              : 'Fill out the form to create a new payment.'
+            }
+          </DialogDescription>
+        </DialogHeader>
+
+        <Form {...form}>
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+            <FormField
+              control={form.control}
+              name="invoiceId"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Invoice</FormLabel>
+                  <Select onValueChange={field.onChange} defaultValue={field.value}>
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select an invoice" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      {invoices.map((invoice) => (
+                        <SelectItem key={invoice.id} value={invoice.id}>
+                          INV-{invoice.id.substring(0, 8)} - ${invoice.totalAmount}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="customerId"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Customer</FormLabel>
+                  <Select onValueChange={field.onChange} defaultValue={field.value}>
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select a customer" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      {customers.map((customer) => (
+                        <SelectItem key={customer.id} value={customer.id}>
+                          {customer.firstName} {customer.lastName}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="amount"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Amount</FormLabel>
+                  <FormControl>
+                    <Input type="number" step="0.01" placeholder="0.00" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="paymentMethod"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Payment Method</FormLabel>
+                  <Select onValueChange={field.onChange} defaultValue={field.value}>
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select payment method" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      <SelectItem value="credit">Credit Card</SelectItem>
+                      <SelectItem value="debit">Debit Card</SelectItem>
+                      <SelectItem value="cash">Cash</SelectItem>
+                      <SelectItem value="bank_transfer">Bank Transfer</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="transactionReference"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Transaction Reference</FormLabel>
+                  <FormControl>
+                    <Input placeholder="Enter transaction reference" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <div className="flex justify-end space-x-2 pt-4">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => onOpenChange(false)}
+              >
+                Cancel
+              </Button>
+              <Button type="submit" disabled={loading}>
+                {loading ? 'Saving...' : payment ? 'Update' : 'Create'}
+              </Button>
+            </div>
+          </form>
+        </Form>
+      </DialogContent>
+    </Dialog>
+  );
+};
+
+export default PaymentForm;

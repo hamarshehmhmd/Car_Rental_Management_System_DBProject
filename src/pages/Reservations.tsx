@@ -16,44 +16,89 @@ import {
 import { Reservation } from '@/types';
 import { reservationService } from '@/services/reservationService';
 import { safeFormatDate } from '@/utils/dateUtils';
+import ReservationForm from '@/components/ReservationForm';
 
 const Reservations: React.FC = () => {
   const [reservations, setReservations] = useState<Reservation[]>([]);
   const [loading, setLoading] = useState(true);
+  const [formOpen, setFormOpen] = useState(false);
+  const [selectedReservation, setSelectedReservation] = useState<Reservation | undefined>();
+
+  const fetchReservations = async () => {
+    setLoading(true);
+    try {
+      const data = await reservationService.getReservations();
+      setReservations(data);
+    } catch (error) {
+      console.error('Error fetching reservations:', error);
+      toast({
+        title: 'Failed to load reservations',
+        description: 'There was an error loading the reservation data.',
+        variant: 'destructive',
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    const fetchReservations = async () => {
-      setLoading(true);
-      try {
-        const data = await reservationService.getReservations();
-        setReservations(data);
-      } catch (error) {
-        console.error('Error fetching reservations:', error);
-        toast({
-          title: 'Failed to load reservations',
-          description: 'There was an error loading the reservation data.',
-          variant: 'destructive',
-        });
-      } finally {
-        setLoading(false);
-      }
-    };
-
     fetchReservations();
   }, []);
 
   const handleAddReservation = () => {
-    toast({
-      title: 'Feature Coming Soon',
-      description: 'Add reservation functionality will be available soon.',
-    });
+    setSelectedReservation(undefined);
+    setFormOpen(true);
   };
 
-  const handleViewReservation = (reservation: Reservation) => {
-    toast({
-      title: 'Reservation Selected',
-      description: `Selected reservation for ${reservation.customerName}`,
-    });
+  const handleEditReservation = (reservation: Reservation) => {
+    setSelectedReservation(reservation);
+    setFormOpen(true);
+  };
+
+  const handleDeleteReservation = async (reservation: Reservation) => {
+    try {
+      await reservationService.deleteReservation(reservation.id);
+      setReservations(prev => prev.filter(r => r.id !== reservation.id));
+      toast({
+        title: 'Reservation Deleted',
+        description: `Reservation for ${reservation.customerName} has been deleted.`,
+      });
+    } catch (error) {
+      console.error('Error deleting reservation:', error);
+      toast({
+        title: 'Delete Failed',
+        description: 'Could not delete the reservation.',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const handleCancelReservation = async (reservation: Reservation) => {
+    try {
+      await reservationService.updateReservation(reservation.id, { status: 'cancelled' });
+      setReservations(prev => 
+        prev.map(r => 
+          r.id === reservation.id 
+            ? { ...r, status: 'cancelled' }
+            : r
+        )
+      );
+      toast({
+        title: 'Reservation Cancelled',
+        description: `Reservation for ${reservation.customerName} has been cancelled.`,
+      });
+    } catch (error) {
+      console.error('Error cancelling reservation:', error);
+      toast({
+        title: 'Cancel Failed',
+        description: 'Could not cancel the reservation.',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const handleFormSuccess = () => {
+    fetchReservations();
   };
 
   const reservationColumns = [
@@ -106,6 +151,46 @@ const Reservations: React.FC = () => {
         <span>{safeFormatDate(reservation.reservationDate)}</span>
       ),
     },
+    {
+      key: 'actions',
+      header: 'Actions',
+      cell: (reservation: Reservation) => (
+        <div className="flex gap-2">
+          <Button 
+            variant="outline" 
+            size="sm"
+            onClick={(e) => {
+              e.stopPropagation();
+              handleEditReservation(reservation);
+            }}
+          >
+            Edit
+          </Button>
+          {reservation.status === 'pending' || reservation.status === 'confirmed' ? (
+            <Button 
+              variant="outline" 
+              size="sm"
+              onClick={(e) => {
+                e.stopPropagation();
+                handleCancelReservation(reservation);
+              }}
+            >
+              Cancel
+            </Button>
+          ) : null}
+          <Button 
+            variant="destructive" 
+            size="sm"
+            onClick={(e) => {
+              e.stopPropagation();
+              handleDeleteReservation(reservation);
+            }}
+          >
+            Delete
+          </Button>
+        </div>
+      ),
+    },
   ];
 
   return (
@@ -135,12 +220,18 @@ const Reservations: React.FC = () => {
               data={reservations}
               columns={reservationColumns}
               searchable={true}
-              onRowClick={handleViewReservation}
               loading={loading}
             />
           </CardContent>
         </Card>
       </div>
+
+      <ReservationForm
+        reservation={selectedReservation}
+        open={formOpen}
+        onOpenChange={setFormOpen}
+        onSuccess={handleFormSuccess}
+      />
     </div>
   );
 };

@@ -16,44 +16,65 @@ import {
 import { Invoice } from '@/types';
 import { invoiceService } from '@/services/invoiceService';
 import { safeFormatDate } from '@/utils/dateUtils';
+import InvoiceForm from '@/components/InvoiceForm';
 
 const Invoices: React.FC = () => {
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [loading, setLoading] = useState(true);
+  const [formOpen, setFormOpen] = useState(false);
+  const [selectedInvoice, setSelectedInvoice] = useState<Invoice | undefined>();
+
+  const fetchInvoices = async () => {
+    setLoading(true);
+    try {
+      const data = await invoiceService.getInvoices();
+      setInvoices(data);
+    } catch (error) {
+      console.error('Error fetching invoices:', error);
+      toast({
+        title: 'Failed to load invoices',
+        description: 'There was an error loading the invoice data.',
+        variant: 'destructive',
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    const fetchInvoices = async () => {
-      setLoading(true);
-      try {
-        const data = await invoiceService.getInvoices();
-        setInvoices(data);
-      } catch (error) {
-        console.error('Error fetching invoices:', error);
-        toast({
-          title: 'Failed to load invoices',
-          description: 'There was an error loading the invoice data.',
-          variant: 'destructive',
-        });
-      } finally {
-        setLoading(false);
-      }
-    };
-
     fetchInvoices();
   }, []);
 
   const handleAddInvoice = () => {
-    toast({
-      title: 'Feature Coming Soon',
-      description: 'Add invoice functionality will be available soon.',
-    });
+    setSelectedInvoice(undefined);
+    setFormOpen(true);
   };
 
-  const handleViewInvoice = (invoice: Invoice) => {
-    toast({
-      title: 'Invoice Selected',
-      description: `Viewing invoice #${invoice.id} for ${invoice.customerName}`,
-    });
+  const handleEditInvoice = (invoice: Invoice) => {
+    setSelectedInvoice(invoice);
+    setFormOpen(true);
+  };
+
+  const handleDeleteInvoice = async (invoice: Invoice) => {
+    try {
+      await invoiceService.deleteInvoice(invoice.id);
+      setInvoices(prev => prev.filter(i => i.id !== invoice.id));
+      toast({
+        title: 'Invoice Deleted',
+        description: `Invoice for ${invoice.customerName} has been deleted.`,
+      });
+    } catch (error) {
+      console.error('Error deleting invoice:', error);
+      toast({
+        title: 'Delete Failed',
+        description: 'Could not delete the invoice.',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const handleFormSuccess = () => {
+    fetchInvoices();
   };
 
   const invoiceColumns = [
@@ -114,6 +135,34 @@ const Invoices: React.FC = () => {
         <StatusBadge status={invoice.status} type="invoice" />
       ),
     },
+    {
+      key: 'actions',
+      header: 'Actions',
+      cell: (invoice: Invoice) => (
+        <div className="flex gap-2">
+          <Button 
+            variant="outline" 
+            size="sm"
+            onClick={(e) => {
+              e.stopPropagation();
+              handleEditInvoice(invoice);
+            }}
+          >
+            Edit
+          </Button>
+          <Button 
+            variant="destructive" 
+            size="sm"
+            onClick={(e) => {
+              e.stopPropagation();
+              handleDeleteInvoice(invoice);
+            }}
+          >
+            Delete
+          </Button>
+        </div>
+      ),
+    },
   ];
 
   return (
@@ -143,12 +192,18 @@ const Invoices: React.FC = () => {
               data={invoices}
               columns={invoiceColumns}
               searchable={true}
-              onRowClick={handleViewInvoice}
               loading={loading}
             />
           </CardContent>
         </Card>
       </div>
+
+      <InvoiceForm
+        invoice={selectedInvoice}
+        open={formOpen}
+        onOpenChange={setFormOpen}
+        onSuccess={handleFormSuccess}
+      />
     </div>
   );
 };
