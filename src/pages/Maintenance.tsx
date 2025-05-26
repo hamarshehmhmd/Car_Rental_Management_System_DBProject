@@ -1,4 +1,3 @@
-
 import React, { useEffect, useState } from 'react';
 import { PlusCircle, Calendar, Car, Wrench } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
@@ -75,6 +74,10 @@ const Maintenance: React.FC = () => {
 
   const handleFormSuccess = () => {
     fetchMaintenanceRecords();
+  };
+
+  const handleCloseForm = () => {
+    setFormOpen(false);
   };
 
   const maintenanceColumns = [
@@ -201,8 +204,8 @@ const Maintenance: React.FC = () => {
 
       <MaintenanceForm
         record={selectedRecord}
-        open={formOpen}
-        onOpenChange={setFormOpen}
+        isOpen={formOpen}
+        onClose={handleCloseForm}
         onSuccess={handleFormSuccess}
       />
     </div>

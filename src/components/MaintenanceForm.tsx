@@ -1,4 +1,3 @@
-
 import React, { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
@@ -31,7 +30,7 @@ import {
 } from '@/components/ui/dialog';
 import { toast } from '@/hooks/use-toast';
 import { maintenanceService } from '@/services/maintenanceService';
-import { supabaseService } from '@/services/supabaseService';
+import { supabase } from '@/integrations/supabase/client';
 
 // Define the form schema
 const maintenanceFormSchema = z.object({
@@ -49,15 +48,15 @@ type MaintenanceFormValues = z.infer<typeof maintenanceFormSchema>;
 
 interface MaintenanceFormProps {
   record?: MaintenanceRecord;
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
+  isOpen: boolean;
+  onClose: () => void;
   onSuccess: () => void;
 }
 
 const MaintenanceForm: React.FC<MaintenanceFormProps> = ({
   record,
-  open,
-  onOpenChange,
+  isOpen,
+  onClose,
   onSuccess,
 }) => {
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
@@ -90,17 +89,41 @@ const MaintenanceForm: React.FC<MaintenanceFormProps> = ({
   useEffect(() => {
     const fetchVehicles = async () => {
       try {
-        const vehicleData = await supabaseService.getFromTable('vehicles');
+        const { data, error } = await supabase
+          .from('vehicles')
+          .select('*');
+        
+        if (error) throw error;
+        
+        const vehicleData: Vehicle[] = (data || []).map((vehicle: any) => ({
+          id: vehicle.id,
+          vin: vehicle.vin,
+          make: vehicle.make,
+          model: vehicle.model,
+          year: vehicle.year,
+          color: vehicle.color,
+          licensePlate: vehicle.licenseplate,
+          mileage: vehicle.mileage,
+          status: vehicle.status,
+          categoryId: vehicle.categoryid,
+          imageUrl: vehicle.imageurl
+        }));
+        
         setVehicles(vehicleData);
       } catch (error) {
         console.error('Error fetching vehicles:', error);
+        toast({
+          title: 'Error',
+          description: 'Failed to fetch vehicles.',
+          variant: 'destructive',
+        });
       }
     };
 
-    if (open) {
+    if (isOpen) {
       fetchVehicles();
     }
-  }, [open]);
+  }, [isOpen]);
 
   const handleSubmit = async (data: MaintenanceFormValues) => {
     setLoading(true);
@@ -137,7 +160,7 @@ const MaintenanceForm: React.FC<MaintenanceFormProps> = ({
         });
       }
       onSuccess();
-      onOpenChange(false);
+      onClose();
       form.reset();
     } catch (error) {
       console.error('Error saving maintenance record:', error);
@@ -152,7 +175,7 @@ const MaintenanceForm: React.FC<MaintenanceFormProps> = ({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="sm:max-w-[500px]">
         <DialogHeader>
           <DialogTitle>{isEditing ? 'Edit Maintenance Record' : 'Add Maintenance Record'}</DialogTitle>
@@ -336,7 +359,7 @@ const MaintenanceForm: React.FC<MaintenanceFormProps> = ({
             />
             
             <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+              <Button type="button" variant="outline" onClick={onClose}>
                 Cancel
               </Button>
               <Button type="submit" disabled={loading}>
