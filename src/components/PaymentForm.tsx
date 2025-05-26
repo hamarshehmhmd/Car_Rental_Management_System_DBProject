@@ -70,7 +70,21 @@ const PaymentForm: React.FC<PaymentFormProps> = ({
   });
 
   useEffect(() => {
+    if (payment) {
+      form.reset({
+        invoiceId: payment.invoiceId,
+        customerId: payment.customerId,
+        amount: payment.amount.toString(),
+        paymentMethod: payment.paymentMethod,
+        transactionReference: payment.transactionReference,
+      });
+    }
+  }, [payment, form]);
+
+  useEffect(() => {
     const fetchData = async () => {
+      if (!open) return;
+      
       try {
         const [invoicesData, customersData] = await Promise.all([
           invoiceService.getInvoices(),
@@ -79,6 +93,9 @@ const PaymentForm: React.FC<PaymentFormProps> = ({
 
         setInvoices(invoicesData);
         setCustomers(customersData);
+        
+        console.log('Loaded invoices:', invoicesData.length);
+        console.log('Loaded customers:', customersData.length);
       } catch (error) {
         console.error('Error fetching form data:', error);
         toast({
@@ -89,13 +106,13 @@ const PaymentForm: React.FC<PaymentFormProps> = ({
       }
     };
 
-    if (open) {
-      fetchData();
-    }
+    fetchData();
   }, [open]);
 
   const onSubmit = async (values: z.infer<typeof formSchema>) => {
     setLoading(true);
+    console.log('Submitting payment with values:', values);
+    
     try {
       const paymentData = {
         invoiceId: values.invoiceId,
@@ -105,8 +122,10 @@ const PaymentForm: React.FC<PaymentFormProps> = ({
         paymentMethod: values.paymentMethod,
         transactionReference: values.transactionReference,
         status: 'completed' as const,
-        processedBy: '550e8400-e29b-41d4-a716-446655440000', // Temporary UUID
+        processedBy: 'system-user', // Using a placeholder since we don't have auth
       };
+
+      console.log('Payment data to submit:', paymentData);
 
       if (payment) {
         await paymentService.updatePayment(payment.id, paymentData);
@@ -129,7 +148,7 @@ const PaymentForm: React.FC<PaymentFormProps> = ({
       console.error('Error saving payment:', error);
       toast({
         title: 'Error',
-        description: 'Could not save the payment.',
+        description: `Could not save the payment: ${error.message || 'Unknown error'}`,
         variant: 'destructive',
       });
     } finally {
@@ -160,7 +179,7 @@ const PaymentForm: React.FC<PaymentFormProps> = ({
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Invoice</FormLabel>
-                  <Select onValueChange={field.onChange} defaultValue={field.value}>
+                  <Select onValueChange={field.onChange} value={field.value}>
                     <FormControl>
                       <SelectTrigger>
                         <SelectValue placeholder="Select an invoice" />
@@ -185,7 +204,7 @@ const PaymentForm: React.FC<PaymentFormProps> = ({
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Customer</FormLabel>
-                  <Select onValueChange={field.onChange} defaultValue={field.value}>
+                  <Select onValueChange={field.onChange} value={field.value}>
                     <FormControl>
                       <SelectTrigger>
                         <SelectValue placeholder="Select a customer" />
@@ -224,7 +243,7 @@ const PaymentForm: React.FC<PaymentFormProps> = ({
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Payment Method</FormLabel>
-                  <Select onValueChange={field.onChange} defaultValue={field.value}>
+                  <Select onValueChange={field.onChange} value={field.value}>
                     <FormControl>
                       <SelectTrigger>
                         <SelectValue placeholder="Select payment method" />
