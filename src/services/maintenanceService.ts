@@ -101,6 +101,33 @@ export const maintenanceService = {
   },
   
   async createMaintenanceRecord(record: Partial<MaintenanceRecord>): Promise<MaintenanceRecord> {
+    // Ensure technician ID is a valid UUID by creating/finding a technician
+    if (!record.technicianId || record.technicianId.length < 36) {
+      const { data: existingUsers } = await supabase
+        .from('users')
+        .select('id')
+        .limit(1);
+      
+      if (!existingUsers || existingUsers.length === 0) {
+        // Create a default technician user
+        const { data: newUser, error: userError } = await supabase
+          .from('users')
+          .insert({
+            firstname: 'System',
+            lastname: 'Technician',
+            email: 'technician@system.com',
+            role: 'technician'
+          })
+          .select()
+          .single();
+        
+        if (userError) throw userError;
+        record.technicianId = newUser.id;
+      } else {
+        record.technicianId = existingUsers[0].id;
+      }
+    }
+    
     return await supabaseService.create('maintenance_records', record, maintenanceTransformer);
   },
   

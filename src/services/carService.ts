@@ -111,6 +111,53 @@ export const carService = {
   // Delete a vehicle
   async deleteVehicle(id: string): Promise<void> {
     try {
+      // First, delete associated data in the correct order
+      
+      // Get all reservations for this vehicle
+      const { data: reservations } = await supabase
+        .from('reservations')
+        .select('id')
+        .eq('vehicleid', id);
+      
+      if (reservations && reservations.length > 0) {
+        for (const reservation of reservations) {
+          // Delete rentals and their invoices for each reservation
+          const { data: rentals } = await supabase
+            .from('rentals')
+            .select('id')
+            .eq('reservationid', reservation.id);
+          
+          if (rentals && rentals.length > 0) {
+            for (const rental of rentals) {
+              // Delete invoices
+              await supabase
+                .from('invoices')
+                .delete()
+                .eq('rentalid', rental.id);
+            }
+            
+            // Delete rentals
+            await supabase
+              .from('rentals')
+              .delete()
+              .eq('reservationid', reservation.id);
+          }
+        }
+        
+        // Delete reservations
+        await supabase
+          .from('reservations')
+          .delete()
+          .eq('vehicleid', id);
+      }
+      
+      // Delete maintenance records
+      await supabase
+        .from('maintenance_records')
+        .delete()
+        .eq('vehicleid', id);
+      
+      // Finally delete the vehicle
       await supabaseService.delete('vehicles', id);
       
       toast({

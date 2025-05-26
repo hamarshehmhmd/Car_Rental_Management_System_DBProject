@@ -16,44 +16,73 @@ import {
 import { Payment } from '@/types';
 import { paymentService } from '@/services/paymentService';
 import { safeFormatDate } from '@/utils/dateUtils';
+import PaymentForm from '@/components/PaymentForm';
 
 const Payments: React.FC = () => {
   const [payments, setPayments] = useState<Payment[]>([]);
   const [loading, setLoading] = useState(true);
+  const [formOpen, setFormOpen] = useState(false);
+  const [selectedPayment, setSelectedPayment] = useState<Payment | undefined>();
+
+  const fetchPayments = async () => {
+    setLoading(true);
+    try {
+      const data = await paymentService.getPayments();
+      setPayments(data);
+    } catch (error) {
+      console.error('Error fetching payments:', error);
+      toast({
+        title: 'Failed to load payments',
+        description: 'There was an error loading the payment data.',
+        variant: 'destructive',
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    const fetchPayments = async () => {
-      setLoading(true);
-      try {
-        const data = await paymentService.getPayments();
-        setPayments(data);
-      } catch (error) {
-        console.error('Error fetching payments:', error);
-        toast({
-          title: 'Failed to load payments',
-          description: 'There was an error loading the payment data.',
-          variant: 'destructive',
-        });
-      } finally {
-        setLoading(false);
-      }
-    };
-
     fetchPayments();
   }, []);
 
   const handleAddPayment = () => {
-    toast({
-      title: 'Feature Coming Soon',
-      description: 'Add payment functionality will be available soon.',
-    });
+    setSelectedPayment(undefined);
+    setFormOpen(true);
+  };
+
+  const handleEditPayment = (payment: Payment) => {
+    setSelectedPayment(payment);
+    setFormOpen(true);
+  };
+
+  const handleDeletePayment = async (payment: Payment) => {
+    try {
+      await paymentService.deletePayment(payment.id);
+      setPayments(prev => prev.filter(p => p.id !== payment.id));
+      toast({
+        title: 'Payment Deleted',
+        description: `Payment for ${payment.customerName} has been deleted.`,
+      });
+    } catch (error) {
+      console.error('Error deleting payment:', error);
+      toast({
+        title: 'Delete Failed',
+        description: 'Could not delete the payment.',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const handleFormSuccess = () => {
+    fetchPayments();
+  };
+
+  const handleCloseForm = () => {
+    setFormOpen(false);
   };
 
   const handleViewPayment = (payment: Payment) => {
-    toast({
-      title: 'Payment Selected',
-      description: `Viewing payment #${payment.id} of $${payment.amount} from ${payment.customerName}`,
-    });
+    handleEditPayment(payment);
   };
 
   const getPaymentMethodBadge = (method: string) => {
@@ -132,6 +161,34 @@ const Payments: React.FC = () => {
         <StatusBadge status={payment.status} type="payment" />
       ),
     },
+    {
+      key: 'actions',
+      header: 'Actions',
+      cell: (payment: Payment) => (
+        <div className="flex gap-2">
+          <Button 
+            variant="outline" 
+            size="sm"
+            onClick={(e) => {
+              e.stopPropagation();
+              handleEditPayment(payment);
+            }}
+          >
+            Edit
+          </Button>
+          <Button 
+            variant="destructive" 
+            size="sm"
+            onClick={(e) => {
+              e.stopPropagation();
+              handleDeletePayment(payment);
+            }}
+          >
+            Delete
+          </Button>
+        </div>
+      ),
+    },
   ];
 
   return (
@@ -167,6 +224,13 @@ const Payments: React.FC = () => {
           </CardContent>
         </Card>
       </div>
+
+      <PaymentForm
+        payment={selectedPayment}
+        open={formOpen}
+        onOpenChange={setFormOpen}
+        onSuccess={handleFormSuccess}
+      />
     </div>
   );
 };

@@ -1,8 +1,8 @@
 
-import { Reservation, ReservationStatus } from '@/types';
-import { supabaseService } from './supabaseService';
 import { supabase } from '@/integrations/supabase/client';
+import { Reservation, ReservationStatus } from '@/types';
 import { toast } from '@/hooks/use-toast';
+import { supabaseService } from './supabaseService';
 
 // Transformer for Reservation data
 const reservationTransformer = {
@@ -12,14 +12,14 @@ const reservationTransformer = {
       customerId: dbReservation.customerid,
       categoryId: dbReservation.categoryid,
       vehicleId: dbReservation.vehicleid,
+      employeeId: dbReservation.employeeid,
       reservationDate: dbReservation.reservationdate,
       pickupDate: dbReservation.pickupdate,
       returnDate: dbReservation.returndate,
       status: dbReservation.status as ReservationStatus,
-      employeeId: dbReservation.employeeid,
       customerName: dbReservation.customerName || 'Unknown Customer',
       categoryName: dbReservation.categoryName || 'Unknown Category',
-      vehicleInfo: dbReservation.vehicleInfo
+      vehicleInfo: dbReservation.vehicleInfo || null
     };
   },
   toDatabase: (reservation: Partial<Reservation>): Record<string, any> => {
@@ -28,11 +28,11 @@ const reservationTransformer = {
     if (reservation.customerId) dbReservation.customerid = reservation.customerId;
     if (reservation.categoryId) dbReservation.categoryid = reservation.categoryId;
     if (reservation.vehicleId) dbReservation.vehicleid = reservation.vehicleId;
+    if (reservation.employeeId) dbReservation.employeeid = reservation.employeeId;
     if (reservation.reservationDate) dbReservation.reservationdate = reservation.reservationDate;
     if (reservation.pickupDate) dbReservation.pickupdate = reservation.pickupDate;
     if (reservation.returnDate) dbReservation.returndate = reservation.returnDate;
     if (reservation.status) dbReservation.status = reservation.status;
-    if (reservation.employeeId) dbReservation.employeeid = reservation.employeeId;
     
     return dbReservation;
   }
@@ -50,7 +50,7 @@ export const reservationService = {
       
       // Enhance with customer, category, and vehicle info
       const enhancedReservations = await Promise.all((reservations || []).map(async (reservation) => {
-        const reservationModel = reservationTransformer.toFrontend(reservation);
+        const reservationRecord = reservationTransformer.toFrontend(reservation);
         
         // Get customer info
         if (reservation.customerid) {
@@ -62,7 +62,7 @@ export const reservationService = {
               .maybeSingle();
               
             if (customer) {
-              reservationModel.customerName = `${customer.firstname} ${customer.lastname}`;
+              reservationRecord.customerName = `${customer.firstname} ${customer.lastname}`;
             }
           } catch (e) {
             console.error('Error fetching customer for reservation:', e);
@@ -79,14 +79,14 @@ export const reservationService = {
               .maybeSingle();
               
             if (category) {
-              reservationModel.categoryName = category.name;
+              reservationRecord.categoryName = category.name;
             }
           } catch (e) {
             console.error('Error fetching category for reservation:', e);
           }
         }
         
-        // Get vehicle info
+        // Get vehicle info if assigned
         if (reservation.vehicleid) {
           try {
             const { data: vehicle } = await supabase
@@ -96,14 +96,14 @@ export const reservationService = {
               .maybeSingle();
               
             if (vehicle) {
-              reservationModel.vehicleInfo = `${vehicle.make} ${vehicle.model} (${vehicle.year})`;
+              reservationRecord.vehicleInfo = `${vehicle.make} ${vehicle.model} (${vehicle.year})`;
             }
           } catch (e) {
             console.error('Error fetching vehicle for reservation:', e);
           }
         }
         
-        return reservationModel;
+        return reservationRecord;
       }));
       
       return enhancedReservations;
@@ -119,6 +119,33 @@ export const reservationService = {
   },
   
   async createReservation(reservation: Partial<Reservation>): Promise<Reservation> {
+    // Create a default employee ID if not provided
+    if (!reservation.employeeId) {
+      const { data: existingUsers } = await supabase
+        .from('users')
+        .select('id')
+        .limit(1);
+      
+      if (!existingUsers || existingUsers.length === 0) {
+        // Create a default user for operations
+        const { data: newUser, error: userError } = await supabase
+          .from('users')
+          .insert({
+            firstname: 'System',
+            lastname: 'Admin',
+            email: 'admin@system.com',
+            role: 'admin'
+          })
+          .select()
+          .single();
+        
+        if (userError) throw userError;
+        reservation.employeeId = newUser.id;
+      } else {
+        reservation.employeeId = existingUsers[0].id;
+      }
+    }
+    
     return await supabaseService.create('reservations', reservation, reservationTransformer);
   },
   
@@ -127,6 +154,39 @@ export const reservationService = {
   },
   
   async deleteReservation(id: string): Promise<void> {
-    return await supabaseService.delete('reservations', id);
+    try {
+      // First, delete any associated rentals and their invoices
+      const { data: rentals } = await supabase
+        .from('rentals')
+        .select('id')
+        .eq('reservationid', id);
+      
+      if (rentals && rentals.length > 0) {
+        // Delete invoices first
+        for (const rental of rentals) {
+          await supabase
+            .from('invoices')
+            .delete()
+            .eq('rentalid', rental.id);
+        }
+        
+        // Then delete rentals
+        await supabase
+          .from('rentals')
+          .delete()
+          .eq('reservationid', id);
+      }
+      
+      // Finally delete the reservation
+      await supabaseService.delete('reservations', id);
+    } catch (error) {
+      console.error('Error deleting reservation:', error);
+      toast({
+        title: 'Error deleting reservation',
+        description: 'Could not delete the reservation.',
+        variant: 'destructive'
+      });
+      throw error;
+    }
   }
 };
