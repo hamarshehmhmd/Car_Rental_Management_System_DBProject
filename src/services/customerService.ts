@@ -1,6 +1,6 @@
 
 import { supabase } from '@/integrations/supabase/client';
-import { Customer, CustomerType } from '@/types';
+import { Customer } from '@/types';
 import { toast } from '@/hooks/use-toast';
 import { supabaseService } from './supabaseService';
 
@@ -17,7 +17,7 @@ const customerTransformer = {
       dateOfBirth: dbCustomer.dateofbirth,
       licenseNumber: dbCustomer.licensenumber,
       licenseExpiry: dbCustomer.licenseexpiry,
-      customerType: dbCustomer.customertype as CustomerType,
+      customerType: dbCustomer.customertype,
       createdAt: dbCustomer.createdat
     };
   },
