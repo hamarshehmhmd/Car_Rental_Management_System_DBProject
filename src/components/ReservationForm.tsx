@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -28,7 +27,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { Reservation, Customer, Vehicle } from '@/types';
+import { Reservation, Customer, Vehicle, VehicleStatus } from '@/types';
 import { reservationService } from '@/services/reservationService';
 import { customerService } from '@/services/customerService';
 import { rentalService } from '@/services/rentalService';
@@ -88,7 +87,7 @@ const ReservationForm: React.FC<ReservationFormProps> = ({
             color: vehicle.color,
             licensePlate: vehicle.licenseplate,
             mileage: vehicle.mileage,
-            status: vehicle.status,
+            status: vehicle.status as VehicleStatus,
             categoryId: vehicle.categoryid,
             imageUrl: vehicle.imageurl,
           })));
