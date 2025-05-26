@@ -68,7 +68,7 @@ export const supabaseService = {
       const dbItem = transformer.toDatabase(item);
       const { data, error } = await supabase
         .from(tableName)
-        .insert(dbItem)
+        .insert(dbItem as any)
         .select()
         .single();
       
@@ -102,7 +102,7 @@ export const supabaseService = {
       const dbItem = transformer.toDatabase(item);
       const { data, error } = await supabase
         .from(tableName)
-        .update(dbItem)
+        .update(dbItem as any)
         .eq('id', id)
         .select()
         .single();

@@ -6,10 +6,13 @@ import StatsCard from '@/components/StatsCard';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import DataTable from '@/components/DataTable';
 import StatusBadge from '@/components/StatusBadge';
+import CarLogo from '@/components/CarLogo';
 import { DashboardSummary, Rental, Reservation, Vehicle } from '@/types';
 import { supabase } from '@/integrations/supabase/client';
-import { carService } from '@/services/carService';
 import { toast } from '@/hooks/use-toast';
+import { rentalService } from '@/services/rentalService';
+import { reservationService } from '@/services/reservationService';
+import { carService } from '@/services/carService';
 
 const Dashboard: React.FC = () => {
   const [summary, setSummary] = useState<DashboardSummary>({
@@ -29,100 +32,46 @@ const Dashboard: React.FC = () => {
   const fetchDashboardData = useCallback(async () => {
     setLoading(true);
     try {
-      // Fetch vehicle data to determine counts
-      const vehicles = await carService.getVehicles();
+      // Fetch all data in parallel
+      const [vehicles, rentals, reservations] = await Promise.all([
+        carService.getVehicles(),
+        rentalService.getRentals(),
+        reservationService.getReservations()
+      ]);
       
-      // Calculate counts from vehicles
+      // Calculate vehicle counts
       const availableCount = vehicles.filter(v => v.status === 'available').length;
       const maintenanceCount = vehicles.filter(v => v.status === 'maintenance').length;
-      const maintenanceVehicles = vehicles.filter(v => v.status === 'maintenance');
+      const maintenanceVehiclesList = vehicles.filter(v => v.status === 'maintenance');
       
-      // For now, we'll use mock data for other metrics
-      // In a real implementation, you would fetch from Supabase for all data
+      // Get active rentals (status = 'active')
+      const activeRentalsList = rentals.filter(r => r.status === 'active');
+      
+      // Get upcoming reservations (status = 'confirmed' and pickup date is in the future)
+      const today = new Date();
+      const upcomingReservationsList = reservations.filter(r => 
+        r.status === 'confirmed' && new Date(r.pickupDate) > today
+      );
+      
+      // Calculate revenue - for now using mock data since we don't have payment records
+      // In a real app, you would calculate this from actual payment/invoice data
+      const todayRevenue = activeRentalsList.length * 150; // Approximate daily rate
+      const monthRevenue = (activeRentalsList.length + upcomingReservationsList.length) * 150 * 5; // Approximate monthly
+      
       setSummary({
-        activeRentals: 12,
-        upcomingReservations: 8,
+        activeRentals: activeRentalsList.length,
+        upcomingReservations: upcomingReservationsList.length,
         vehiclesInMaintenance: maintenanceCount,
         availableVehicles: availableCount,
-        todayRevenue: 2450,
-        monthRevenue: 28500
+        todayRevenue,
+        monthRevenue
       });
       
-      // Mock active rentals
-      setActiveRentals([
-        {
-          id: '1',
-          reservationId: 'r1',
-          customerId: 'c1',
-          vehicleId: 'v1',
-          checkoutEmployeeId: 'e1',
-          checkoutDate: '2025-05-15',
-          expectedReturnDate: '2025-05-20',
-          checkoutMileage: 12500,
-          status: 'active',
-          customerName: 'John Smith',
-          vehicleInfo: 'Toyota Camry (2023)'
-        },
-        {
-          id: '2',
-          reservationId: 'r2',
-          customerId: 'c2',
-          vehicleId: 'v2',
-          checkoutEmployeeId: 'e1',
-          checkoutDate: '2025-05-16',
-          expectedReturnDate: '2025-05-18',
-          checkoutMileage: 8700,
-          status: 'active',
-          customerName: 'Alice Johnson',
-          vehicleInfo: 'Honda Civic (2024)'
-        },
-        {
-          id: '3',
-          reservationId: 'r3',
-          customerId: 'c3',
-          vehicleId: 'v3',
-          checkoutEmployeeId: 'e2',
-          checkoutDate: '2025-05-14',
-          expectedReturnDate: '2025-05-21',
-          checkoutMileage: 23400,
-          status: 'active',
-          customerName: 'Robert Davis',
-          vehicleInfo: 'Ford Explorer (2022)'
-        }
-      ]);
+      // Set the actual data
+      setActiveRentals(activeRentalsList.slice(0, 5)); // Show only first 5 for dashboard
+      setUpcomingReservations(upcomingReservationsList.slice(0, 5)); // Show only first 5 for dashboard
+      setMaintenanceVehicles(maintenanceVehiclesList);
       
-      // Mock upcoming reservations
-      setUpcomingReservations([
-        {
-          id: 'r4',
-          customerId: 'c4',
-          categoryId: 'cat1',
-          vehicleId: 'v4',
-          reservationDate: '2025-05-10',
-          pickupDate: '2025-05-20',
-          returnDate: '2025-05-25',
-          status: 'confirmed',
-          employeeId: 'e1',
-          customerName: 'Emma Wilson',
-          categoryName: 'SUV'
-        },
-        {
-          id: 'r5',
-          customerId: 'c5',
-          categoryId: 'cat2',
-          vehicleId: null,
-          reservationDate: '2025-05-12',
-          pickupDate: '2025-05-22',
-          returnDate: '2025-05-24',
-          status: 'confirmed',
-          employeeId: 'e2',
-          customerName: 'Michael Brown',
-          categoryName: 'Economy'
-        }
-      ]);
-      
-      // Use actual maintenance vehicles
-      setMaintenanceVehicles(maintenanceVehicles);
     } catch (error) {
       console.error('Error fetching dashboard data:', error);
       toast({
@@ -138,16 +87,23 @@ const Dashboard: React.FC = () => {
   useEffect(() => {
     fetchDashboardData();
     
-    // Set up real-time listeners for vehicle status changes
+    // Set up real-time listeners for data changes
     const channel = supabase
-      .channel('public:vehicles')
+      .channel('dashboard-updates')
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'vehicles' },
-        (payload) => {
-          console.log('Vehicle data changed:', payload);
-          fetchDashboardData();
-        }
+        () => fetchDashboardData()
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'rentals' },
+        () => fetchDashboardData()
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'reservations' },
+        () => fetchDashboardData()
       )
       .subscribe();
     
@@ -161,22 +117,39 @@ const Dashboard: React.FC = () => {
     {
       key: 'customerName',
       header: 'Customer',
-      cell: (rental: Rental) => <span>{rental.customerName}</span>
+      cell: (rental: Rental) => (
+        <span className="font-medium">{rental.customerName || 'Unknown Customer'}</span>
+      )
     },
     {
       key: 'vehicleInfo',
       header: 'Vehicle',
-      cell: (rental: Rental) => <span>{rental.vehicleInfo}</span>
+      cell: (rental: Rental) => (
+        <div className="flex items-center gap-2">
+          <div className="w-8 h-8 rounded-full overflow-hidden bg-gray-100 flex items-center justify-center">
+            <CarLogo 
+              make={rental.vehicleInfo?.split(' ')[0] || 'Unknown'} 
+              className="w-6 h-6 object-contain"
+              fallbackClassName="w-4 h-4 text-gray-400"
+            />
+          </div>
+          <span className="text-sm">{rental.vehicleInfo || 'Unknown Vehicle'}</span>
+        </div>
+      )
     },
     {
       key: 'checkoutDate',
-      header: 'Checkout Date',
-      cell: (rental: Rental) => <span>{rental.checkoutDate}</span>
+      header: 'Checkout',
+      cell: (rental: Rental) => (
+        <span className="text-sm">{new Date(rental.checkoutDate).toLocaleDateString()}</span>
+      )
     },
     {
       key: 'expectedReturnDate',
-      header: 'Return Date',
-      cell: (rental: Rental) => <span>{rental.expectedReturnDate}</span>
+      header: 'Return Due',
+      cell: (rental: Rental) => (
+        <span className="text-sm">{new Date(rental.expectedReturnDate).toLocaleDateString()}</span>
+      )
     },
     {
       key: 'status',
@@ -190,22 +163,30 @@ const Dashboard: React.FC = () => {
     {
       key: 'customerName',
       header: 'Customer',
-      cell: (reservation: Reservation) => <span>{reservation.customerName}</span>
+      cell: (reservation: Reservation) => (
+        <span className="font-medium">{reservation.customerName || 'Unknown Customer'}</span>
+      )
     },
     {
       key: 'categoryName',
-      header: 'Vehicle Category',
-      cell: (reservation: Reservation) => <span>{reservation.categoryName}</span>
+      header: 'Category',
+      cell: (reservation: Reservation) => (
+        <span className="text-sm">{reservation.categoryName || 'Unknown Category'}</span>
+      )
     },
     {
       key: 'pickupDate',
-      header: 'Pickup Date',
-      cell: (reservation: Reservation) => <span>{reservation.pickupDate}</span>
+      header: 'Pickup',
+      cell: (reservation: Reservation) => (
+        <span className="text-sm">{new Date(reservation.pickupDate).toLocaleDateString()}</span>
+      )
     },
     {
       key: 'returnDate',
-      header: 'Return Date',
-      cell: (reservation: Reservation) => <span>{reservation.returnDate}</span>
+      header: 'Return',
+      cell: (reservation: Reservation) => (
+        <span className="text-sm">{new Date(reservation.returnDate).toLocaleDateString()}</span>
+      )
     }
   ];
   
@@ -213,23 +194,30 @@ const Dashboard: React.FC = () => {
   const maintenanceColumns = [
     {
       key: 'make',
-      header: 'Make',
-      cell: (vehicle: Vehicle) => <span>{vehicle.make}</span>
-    },
-    {
-      key: 'model',
-      header: 'Model',
-      cell: (vehicle: Vehicle) => <span>{vehicle.model}</span>
-    },
-    {
-      key: 'year',
-      header: 'Year',
-      cell: (vehicle: Vehicle) => <span>{vehicle.year}</span>
+      header: 'Vehicle',
+      cell: (vehicle: Vehicle) => (
+        <div className="flex items-center gap-2">
+          <div className="w-8 h-8 rounded-full overflow-hidden bg-gray-100 flex items-center justify-center">
+            <CarLogo 
+              make={vehicle.make} 
+              model={vehicle.model}
+              className="w-6 h-6 object-contain"
+              fallbackClassName="w-4 h-4 text-gray-400"
+            />
+          </div>
+          <div>
+            <span className="font-medium text-sm">{vehicle.make} {vehicle.model}</span>
+            <div className="text-xs text-gray-500">{vehicle.year}</div>
+          </div>
+        </div>
+      )
     },
     {
       key: 'licensePlate',
-      header: 'License Plate',
-      cell: (vehicle: Vehicle) => <span>{vehicle.licensePlate}</span>
+      header: 'License',
+      cell: (vehicle: Vehicle) => (
+        <span className="font-mono text-sm">{vehicle.licensePlate}</span>
+      )
     },
     {
       key: 'status',
@@ -239,61 +227,61 @@ const Dashboard: React.FC = () => {
   ];
   
   return (
-    <div>
+    <div className="min-h-screen">
       <PageHeader 
         title="Dashboard" 
         description="Overview of your rental fleet and business metrics."
       />
       
-      <div className="p-8">
-        {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
+      <div className="p-4 md:p-6 lg:p-8 space-y-6">
+        {/* Stats Cards - Responsive Grid */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4 lg:gap-6">
           <StatsCard
             title="Active Rentals"
             value={summary.activeRentals}
-            icon={<Car className="h-5 w-5" />}
+            icon={<Car className="h-4 w-4 lg:h-5 lg:w-5" />}
             description="Current ongoing rentals"
           />
           <StatsCard
             title="Upcoming Reservations"
             value={summary.upcomingReservations}
-            icon={<Calendar className="h-5 w-5" />}
+            icon={<Calendar className="h-4 w-4 lg:h-5 lg:w-5" />}
             description="In the next 7 days"
           />
           <StatsCard
-            title="Vehicles in Maintenance"
+            title="In Maintenance"
             value={summary.vehiclesInMaintenance}
-            icon={<Wrench className="h-5 w-5" />}
+            icon={<Wrench className="h-4 w-4 lg:h-5 lg:w-5" />}
             description="Currently unavailable"
           />
           <StatsCard
             title="Available Vehicles"
             value={summary.availableVehicles}
-            icon={<Car className="h-5 w-5" />}
+            icon={<Car className="h-4 w-4 lg:h-5 lg:w-5" />}
             description="Ready for rental"
           />
           <StatsCard
             title="Today's Revenue"
             value={`$${summary.todayRevenue.toLocaleString()}`}
-            icon={<CreditCard className="h-5 w-5" />}
+            icon={<CreditCard className="h-4 w-4 lg:h-5 lg:w-5" />}
             trend={{ value: 12, isPositive: true }}
           />
           <StatsCard
             title="Monthly Revenue"
             value={`$${summary.monthRevenue.toLocaleString()}`}
-            icon={<CreditCard className="h-5 w-5" />}
+            icon={<CreditCard className="h-4 w-4 lg:h-5 lg:w-5" />}
             trend={{ value: 8, isPositive: true }}
           />
         </div>
         
-        {/* Tables grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        {/* Tables grid - Responsive Layout */}
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
           {/* Active Rentals Table */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Active Rentals</CardTitle>
+          <Card className="col-span-1">
+            <CardHeader className="pb-4">
+              <CardTitle className="text-lg">Active Rentals</CardTitle>
             </CardHeader>
-            <CardContent>
+            <CardContent className="pt-0">
               <DataTable
                 data={activeRentals}
                 columns={rentalColumns}
@@ -304,11 +292,11 @@ const Dashboard: React.FC = () => {
           </Card>
           
           {/* Upcoming Reservations Table */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Upcoming Reservations</CardTitle>
+          <Card className="col-span-1">
+            <CardHeader className="pb-4">
+              <CardTitle className="text-lg">Upcoming Reservations</CardTitle>
             </CardHeader>
-            <CardContent>
+            <CardContent className="pt-0">
               <DataTable
                 data={upcomingReservations}
                 columns={reservationColumns}
@@ -317,22 +305,22 @@ const Dashboard: React.FC = () => {
               />
             </CardContent>
           </Card>
-          
-          {/* Maintenance Vehicles Table */}
-          <Card className="lg:col-span-2">
-            <CardHeader>
-              <CardTitle>Vehicles in Maintenance</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <DataTable
-                data={maintenanceVehicles}
-                columns={maintenanceColumns}
-                searchable={false}
-                loading={loading}
-              />
-            </CardContent>
-          </Card>
         </div>
+        
+        {/* Maintenance Vehicles Table - Full Width */}
+        <Card>
+          <CardHeader className="pb-4">
+            <CardTitle className="text-lg">Vehicles in Maintenance</CardTitle>
+          </CardHeader>
+          <CardContent className="pt-0">
+            <DataTable
+              data={maintenanceVehicles}
+              columns={maintenanceColumns}
+              searchable={false}
+              loading={loading}
+            />
+          </CardContent>
+        </Card>
       </div>
     </div>
   );
