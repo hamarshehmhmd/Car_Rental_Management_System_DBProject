@@ -1,9 +1,9 @@
 
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { MaintenanceRecord, Vehicle, MaintenanceStatus } from '@/types';
+import { MaintenanceRecord, Vehicle } from '@/types';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import {
@@ -30,6 +30,8 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 import { toast } from '@/hooks/use-toast';
+import { maintenanceService } from '@/services/maintenanceService';
+import { supabaseService } from '@/services/supabaseService';
 
 // Define the form schema
 const maintenanceFormSchema = z.object({
@@ -46,20 +48,20 @@ const maintenanceFormSchema = z.object({
 type MaintenanceFormValues = z.infer<typeof maintenanceFormSchema>;
 
 interface MaintenanceFormProps {
-  isOpen: boolean;
-  onClose: () => void;
-  onSave: () => void;
   record?: MaintenanceRecord;
-  vehicles: Vehicle[];
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onSuccess: () => void;
 }
 
 const MaintenanceForm: React.FC<MaintenanceFormProps> = ({
-  isOpen,
-  onClose,
-  onSave,
   record,
-  vehicles,
+  open,
+  onOpenChange,
+  onSuccess,
 }) => {
+  const [vehicles, setVehicles] = useState<Vehicle[]>([]);
+  const [loading, setLoading] = useState(false);
   const isEditing = !!record;
   
   const form = useForm<MaintenanceFormValues>({
@@ -85,27 +87,72 @@ const MaintenanceForm: React.FC<MaintenanceFormProps> = ({
     },
   });
 
+  useEffect(() => {
+    const fetchVehicles = async () => {
+      try {
+        const vehicleData = await supabaseService.getFromTable('vehicles');
+        setVehicles(vehicleData);
+      } catch (error) {
+        console.error('Error fetching vehicles:', error);
+      }
+    };
+
+    if (open) {
+      fetchVehicles();
+    }
+  }, [open]);
+
   const handleSubmit = async (data: MaintenanceFormValues) => {
+    setLoading(true);
     try {
-      // This is a placeholder - in a real implementation, you would call a service to save the data
-      console.log('Saving maintenance data:', data);
-      toast({
-        title: isEditing ? 'Maintenance Record Updated' : 'Maintenance Record Created',
-        description: 'The maintenance record has been saved.',
-      });
-      onSave();
-      onClose();
+      if (isEditing && record) {
+        await maintenanceService.updateMaintenanceRecord(record.id, {
+          vehicleId: data.vehicleId,
+          maintenanceType: data.maintenanceType,
+          description: data.description,
+          technicianId: data.technicianId,
+          maintenanceDate: data.maintenanceDate,
+          mileage: data.mileage,
+          cost: data.cost,
+          status: data.status,
+        });
+        toast({
+          title: 'Maintenance Record Updated',
+          description: 'The maintenance record has been updated successfully.',
+        });
+      } else {
+        await maintenanceService.createMaintenanceRecord({
+          vehicleId: data.vehicleId,
+          maintenanceType: data.maintenanceType,
+          description: data.description,
+          technicianId: data.technicianId,
+          maintenanceDate: data.maintenanceDate,
+          mileage: data.mileage,
+          cost: data.cost,
+          status: data.status,
+        });
+        toast({
+          title: 'Maintenance Record Created',
+          description: 'The maintenance record has been created successfully.',
+        });
+      }
+      onSuccess();
+      onOpenChange(false);
+      form.reset();
     } catch (error) {
+      console.error('Error saving maintenance record:', error);
       toast({
         title: 'Error',
         description: 'There was a problem saving the maintenance record.',
         variant: 'destructive',
       });
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[500px]">
         <DialogHeader>
           <DialogTitle>{isEditing ? 'Edit Maintenance Record' : 'Add Maintenance Record'}</DialogTitle>
@@ -197,7 +244,7 @@ const MaintenanceForm: React.FC<MaintenanceFormProps> = ({
                 name="technicianId"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Technician</FormLabel>
+                    <FormLabel>Technician ID</FormLabel>
                     <FormControl>
                       <Input placeholder="Technician ID" {...field} />
                     </FormControl>
@@ -233,7 +280,7 @@ const MaintenanceForm: React.FC<MaintenanceFormProps> = ({
                         type="number"
                         min="0"
                         {...field}
-                        onChange={e => field.onChange(parseInt(e.target.value))}
+                        onChange={e => field.onChange(parseInt(e.target.value) || 0)}
                       />
                     </FormControl>
                     <FormMessage />
@@ -253,7 +300,7 @@ const MaintenanceForm: React.FC<MaintenanceFormProps> = ({
                         min="0"
                         step="0.01"
                         {...field}
-                        onChange={e => field.onChange(parseFloat(e.target.value))}
+                        onChange={e => field.onChange(parseFloat(e.target.value) || 0)}
                       />
                     </FormControl>
                     <FormMessage />
@@ -289,8 +336,12 @@ const MaintenanceForm: React.FC<MaintenanceFormProps> = ({
             />
             
             <DialogFooter>
-              <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
-              <Button type="submit">{isEditing ? 'Update' : 'Create'}</Button>
+              <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+                Cancel
+              </Button>
+              <Button type="submit" disabled={loading}>
+                {loading ? 'Saving...' : (isEditing ? 'Update' : 'Create')}
+              </Button>
             </DialogFooter>
           </form>
         </Form>
