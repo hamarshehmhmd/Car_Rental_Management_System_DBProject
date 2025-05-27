@@ -101,41 +101,127 @@ export const maintenanceService = {
   },
   
   async createMaintenanceRecord(record: Partial<MaintenanceRecord>): Promise<MaintenanceRecord> {
-    // Ensure technician ID is a valid UUID by creating/finding a technician
-    if (!record.technicianId || record.technicianId.length < 36) {
-      const { data: existingUsers } = await supabase
-        .from('users')
-        .select('id')
-        .limit(1);
-      
-      if (!existingUsers || existingUsers.length === 0) {
-        // Create a default technician user
-        const { data: newUser, error: userError } = await supabase
+    try {
+      // Ensure technician ID is a valid UUID by creating/finding a technician
+      if (!record.technicianId || record.technicianId.length < 36) {
+        const { data: existingUsers } = await supabase
           .from('users')
-          .insert({
-            firstname: 'System',
-            lastname: 'Technician',
-            email: 'technician@system.com',
-            role: 'technician'
-          })
-          .select()
-          .single();
+          .select('id')
+          .limit(1);
         
-        if (userError) throw userError;
-        record.technicianId = newUser.id;
-      } else {
-        record.technicianId = existingUsers[0].id;
+        if (!existingUsers || existingUsers.length === 0) {
+          // Create a default technician user
+          const { data: newUser, error: userError } = await supabase
+            .from('users')
+            .insert({
+              firstname: 'System',
+              lastname: 'Technician',
+              email: 'technician@system.com',
+              role: 'technician'
+            })
+            .select()
+            .single();
+          
+          if (userError) throw userError;
+          record.technicianId = newUser.id;
+        } else {
+          record.technicianId = existingUsers[0].id;
+        }
       }
+      
+      // When creating a maintenance record, update the vehicle status to 'maintenance'
+      if (record.vehicleId && (record.status === 'pending' || record.status === 'in_progress')) {
+        const { error: vehicleUpdateError } = await supabase
+          .from('vehicles')
+          .update({ status: 'maintenance' })
+          .eq('id', record.vehicleId);
+        
+        if (vehicleUpdateError) {
+          console.error('Error updating vehicle status:', vehicleUpdateError);
+        } else {
+          console.log(`Vehicle ${record.vehicleId} status updated to maintenance`);
+        }
+      }
+      
+      return await supabaseService.create('maintenance_records', record, maintenanceTransformer);
+    } catch (error) {
+      console.error('Error creating maintenance record:', error);
+      throw error;
     }
-    
-    return await supabaseService.create('maintenance_records', record, maintenanceTransformer);
   },
   
   async updateMaintenanceRecord(id: string, record: Partial<MaintenanceRecord>): Promise<MaintenanceRecord> {
-    return await supabaseService.update('maintenance_records', id, record, maintenanceTransformer);
+    try {
+      // Get the current maintenance record to check vehicle ID
+      const { data: currentRecord } = await supabase
+        .from('maintenance_records')
+        .select('vehicleid, status')
+        .eq('id', id)
+        .single();
+      
+      // If maintenance is being completed, set vehicle back to available
+      if (record.status === 'completed' && currentRecord?.vehicleid) {
+        const { error: vehicleUpdateError } = await supabase
+          .from('vehicles')
+          .update({ status: 'available' })
+          .eq('id', currentRecord.vehicleid);
+        
+        if (vehicleUpdateError) {
+          console.error('Error updating vehicle status back to available:', vehicleUpdateError);
+        } else {
+          console.log(`Vehicle ${currentRecord.vehicleid} status updated back to available`);
+        }
+      }
+      
+      // If maintenance is being started, set vehicle to maintenance
+      if ((record.status === 'pending' || record.status === 'in_progress') && currentRecord?.vehicleid) {
+        const { error: vehicleUpdateError } = await supabase
+          .from('vehicles')
+          .update({ status: 'maintenance' })
+          .eq('id', currentRecord.vehicleid);
+        
+        if (vehicleUpdateError) {
+          console.error('Error updating vehicle status to maintenance:', vehicleUpdateError);
+        } else {
+          console.log(`Vehicle ${currentRecord.vehicleid} status updated to maintenance`);
+        }
+      }
+      
+      return await supabaseService.update('maintenance_records', id, record, maintenanceTransformer);
+    } catch (error) {
+      console.error('Error updating maintenance record:', error);
+      throw error;
+    }
   },
   
   async deleteMaintenanceRecord(id: string): Promise<void> {
-    return await supabaseService.delete('maintenance_records', id);
+    try {
+      // Get the maintenance record to find the vehicle ID
+      const { data: maintenanceRecord } = await supabase
+        .from('maintenance_records')
+        .select('vehicleid')
+        .eq('id', id)
+        .single();
+      
+      // Delete the maintenance record
+      await supabaseService.delete('maintenance_records', id);
+      
+      // If there was a vehicle associated, set it back to available
+      if (maintenanceRecord?.vehicleid) {
+        const { error: vehicleUpdateError } = await supabase
+          .from('vehicles')
+          .update({ status: 'available' })
+          .eq('id', maintenanceRecord.vehicleid);
+        
+        if (vehicleUpdateError) {
+          console.error('Error updating vehicle status back to available:', vehicleUpdateError);
+        } else {
+          console.log(`Vehicle ${maintenanceRecord.vehicleid} status updated back to available after maintenance deletion`);
+        }
+      }
+    } catch (error) {
+      console.error('Error deleting maintenance record:', error);
+      throw error;
+    }
   }
 };

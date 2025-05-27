@@ -90,8 +90,8 @@ const Dashboard: React.FC = () => {
       });
       
       // Set the actual data
-      setActiveRentals(activeRentalsList.slice(0, 5)); // Show only first 5 for dashboard
-      setUpcomingReservations(upcomingReservationsList.slice(0, 5)); // Show only first 5 for dashboard
+      setActiveRentals(activeRentalsList.slice(0, 5));
+      setUpcomingReservations(upcomingReservationsList.slice(0, 5));
       setMaintenanceVehicles(maintenanceVehiclesList);
       
     } catch (error) {
@@ -109,46 +109,54 @@ const Dashboard: React.FC = () => {
   useEffect(() => {
     fetchDashboardData();
     
-    // Set up real-time listeners for data changes including payments and invoices
+    // Set up real-time listeners for all relevant tables
     const channel = supabase
-      .channel('dashboard-updates')
+      .channel('dashboard-realtime-updates')
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'vehicles' },
-        () => {
-          console.log('Vehicle update detected, refreshing dashboard');
+        (payload) => {
+          console.log('Vehicle update detected:', payload);
           fetchDashboardData();
         }
       )
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'rentals' },
-        () => {
-          console.log('Rental update detected, refreshing dashboard');
+        (payload) => {
+          console.log('Rental update detected:', payload);
           fetchDashboardData();
         }
       )
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'reservations' },
-        () => {
-          console.log('Reservation update detected, refreshing dashboard');
+        (payload) => {
+          console.log('Reservation update detected:', payload);
           fetchDashboardData();
         }
       )
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'payments' },
-        () => {
-          console.log('Payment update detected, refreshing dashboard');
+        (payload) => {
+          console.log('Payment update detected:', payload);
           fetchDashboardData();
         }
       )
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'invoices' },
-        () => {
-          console.log('Invoice update detected, refreshing dashboard');
+        (payload) => {
+          console.log('Invoice update detected:', payload);
+          fetchDashboardData();
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'maintenance_records' },
+        (payload) => {
+          console.log('Maintenance record update detected:', payload);
           fetchDashboardData();
         }
       )
@@ -205,7 +213,6 @@ const Dashboard: React.FC = () => {
     }
   ];
   
-  // Define table columns for upcoming reservations
   const reservationColumns = [
     {
       key: 'customerName',
@@ -237,7 +244,6 @@ const Dashboard: React.FC = () => {
     }
   ];
   
-  // Define table columns for maintenance vehicles
   const maintenanceColumns = [
     {
       key: 'make',
