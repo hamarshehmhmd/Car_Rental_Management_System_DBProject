@@ -1,4 +1,3 @@
-
 import { Payment, PaymentStatus } from '@/types';
 import { supabaseService } from './supabaseService';
 import { supabase } from '@/integrations/supabase/client';
@@ -34,6 +33,61 @@ const paymentTransformer = {
     if (payment.processedBy) dbPayment.processedby = payment.processedBy;
     
     return dbPayment;
+  }
+};
+
+// Helper function to check if invoice is fully paid and update status
+const checkAndUpdateInvoiceStatus = async (invoiceId: string): Promise<void> => {
+  try {
+    // Get the invoice total amount
+    const { data: invoice, error: invoiceError } = await supabase
+      .from('invoices')
+      .select('totalamount, status')
+      .eq('id', invoiceId)
+      .single();
+
+    if (invoiceError || !invoice) {
+      console.error('Error fetching invoice:', invoiceError);
+      return;
+    }
+
+    // Get all payments for this invoice
+    const { data: payments, error: paymentsError } = await supabase
+      .from('payments')
+      .select('amount')
+      .eq('invoiceid', invoiceId)
+      .eq('status', 'completed');
+
+    if (paymentsError) {
+      console.error('Error fetching payments:', paymentsError);
+      return;
+    }
+
+    // Calculate total paid amount
+    const totalPaid = payments?.reduce((sum, payment) => sum + Number(payment.amount), 0) || 0;
+    const invoiceTotal = Number(invoice.totalamount);
+
+    console.log(`Invoice ${invoiceId}: Total amount: ${invoiceTotal}, Total paid: ${totalPaid}`);
+
+    // If invoice is fully paid, update status to 'paid'
+    if (totalPaid >= invoiceTotal && invoice.status !== 'paid') {
+      const { error: updateError } = await supabase
+        .from('invoices')
+        .update({ status: 'paid' })
+        .eq('id', invoiceId);
+
+      if (updateError) {
+        console.error('Error updating invoice status:', updateError);
+      } else {
+        console.log(`Invoice ${invoiceId} marked as paid`);
+        toast({
+          title: 'Invoice Updated',
+          description: 'Invoice has been marked as paid in full.',
+        });
+      }
+    }
+  } catch (error) {
+    console.error('Error checking invoice payment status:', error);
   }
 };
 
@@ -93,11 +147,25 @@ export const paymentService = {
   },
   
   async createPayment(payment: Partial<Payment>): Promise<Payment> {
-    return await supabaseService.create('payments', payment, paymentTransformer);
+    const createdPayment = await supabaseService.create('payments', payment, paymentTransformer);
+    
+    // If payment is completed and has an invoice, check if invoice should be marked as paid
+    if (payment.status === 'completed' && payment.invoiceId) {
+      await checkAndUpdateInvoiceStatus(payment.invoiceId);
+    }
+    
+    return createdPayment;
   },
   
   async updatePayment(id: string, payment: Partial<Payment>): Promise<Payment> {
-    return await supabaseService.update('payments', id, payment, paymentTransformer);
+    const updatedPayment = await supabaseService.update('payments', id, payment, paymentTransformer);
+    
+    // If payment is completed and has an invoice, check if invoice should be marked as paid
+    if (payment.status === 'completed' && payment.invoiceId) {
+      await checkAndUpdateInvoiceStatus(payment.invoiceId);
+    }
+    
+    return updatedPayment;
   },
   
   async deletePayment(id: string): Promise<void> {

@@ -13,6 +13,8 @@ import { toast } from '@/hooks/use-toast';
 import { rentalService } from '@/services/rentalService';
 import { reservationService } from '@/services/reservationService';
 import { carService } from '@/services/carService';
+import { paymentService } from '@/services/paymentService';
+import { invoiceService } from '@/services/invoiceService';
 
 const Dashboard: React.FC = () => {
   const [summary, setSummary] = useState<DashboardSummary>({
@@ -33,10 +35,12 @@ const Dashboard: React.FC = () => {
     setLoading(true);
     try {
       // Fetch all data in parallel
-      const [vehicles, rentals, reservations] = await Promise.all([
+      const [vehicles, rentals, reservations, payments, invoices] = await Promise.all([
         carService.getVehicles(),
         rentalService.getRentals(),
-        reservationService.getReservations()
+        reservationService.getReservations(),
+        paymentService.getPayments(),
+        invoiceService.getInvoices()
       ]);
       
       // Calculate vehicle counts
@@ -53,10 +57,28 @@ const Dashboard: React.FC = () => {
         r.status === 'confirmed' && new Date(r.pickupDate) > today
       );
       
-      // Calculate revenue - for now using mock data since we don't have payment records
-      // In a real app, you would calculate this from actual payment/invoice data
-      const todayRevenue = activeRentalsList.length * 150; // Approximate daily rate
-      const monthRevenue = (activeRentalsList.length + upcomingReservationsList.length) * 150 * 5; // Approximate monthly
+      // Calculate revenue from actual payments
+      const todayStart = new Date();
+      todayStart.setHours(0, 0, 0, 0);
+      const todayEnd = new Date();
+      todayEnd.setHours(23, 59, 59, 999);
+      
+      const todaysPayments = payments.filter(p => {
+        const paymentDate = new Date(p.paymentDate);
+        return p.status === 'completed' && paymentDate >= todayStart && paymentDate <= todayEnd;
+      });
+      
+      const monthStart = new Date();
+      monthStart.setDate(1);
+      monthStart.setHours(0, 0, 0, 0);
+      
+      const thisMonthsPayments = payments.filter(p => {
+        const paymentDate = new Date(p.paymentDate);
+        return p.status === 'completed' && paymentDate >= monthStart;
+      });
+      
+      const todayRevenue = todaysPayments.reduce((sum, payment) => sum + payment.amount, 0);
+      const monthRevenue = thisMonthsPayments.reduce((sum, payment) => sum + payment.amount, 0);
       
       setSummary({
         activeRentals: activeRentalsList.length,
@@ -87,23 +109,48 @@ const Dashboard: React.FC = () => {
   useEffect(() => {
     fetchDashboardData();
     
-    // Set up real-time listeners for data changes
+    // Set up real-time listeners for data changes including payments and invoices
     const channel = supabase
       .channel('dashboard-updates')
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'vehicles' },
-        () => fetchDashboardData()
+        () => {
+          console.log('Vehicle update detected, refreshing dashboard');
+          fetchDashboardData();
+        }
       )
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'rentals' },
-        () => fetchDashboardData()
+        () => {
+          console.log('Rental update detected, refreshing dashboard');
+          fetchDashboardData();
+        }
       )
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'reservations' },
-        () => fetchDashboardData()
+        () => {
+          console.log('Reservation update detected, refreshing dashboard');
+          fetchDashboardData();
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'payments' },
+        () => {
+          console.log('Payment update detected, refreshing dashboard');
+          fetchDashboardData();
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'invoices' },
+        () => {
+          console.log('Invoice update detected, refreshing dashboard');
+          fetchDashboardData();
+        }
       )
       .subscribe();
     
