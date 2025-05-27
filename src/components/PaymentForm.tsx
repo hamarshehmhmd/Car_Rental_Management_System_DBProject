@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -32,6 +31,7 @@ import { Payment, Invoice, Customer } from '@/types';
 import { paymentService } from '@/services/paymentService';
 import { invoiceService } from '@/services/invoiceService';
 import { customerService } from '@/services/customerService';
+import { supabase } from '@/integrations/supabase/client';
 
 const formSchema = z.object({
   invoiceId: z.string().min(1, 'Invoice is required'),
@@ -57,6 +57,7 @@ const PaymentForm: React.FC<PaymentFormProps> = ({
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [loading, setLoading] = useState(false);
+  const [validUserId, setValidUserId] = useState<string | null>(null);
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -94,6 +95,19 @@ const PaymentForm: React.FC<PaymentFormProps> = ({
         setInvoices(invoicesData);
         setCustomers(customersData);
         
+        // Get a valid user ID from the users table
+        const { data: users, error: usersError } = await supabase
+          .from('users')
+          .select('id')
+          .limit(1);
+          
+        if (!usersError && users && users.length > 0) {
+          setValidUserId(users[0].id);
+          console.log('Found valid user ID:', users[0].id);
+        } else {
+          console.log('No users found in the database');
+        }
+        
         console.log('Loaded invoices:', invoicesData.length);
         console.log('Loaded customers:', customersData.length);
       } catch (error) {
@@ -114,6 +128,10 @@ const PaymentForm: React.FC<PaymentFormProps> = ({
     console.log('Submitting payment with values:', values);
     
     try {
+      if (!validUserId) {
+        throw new Error('No valid user found. Please ensure there are users in the system.');
+      }
+
       const paymentData = {
         invoiceId: values.invoiceId,
         customerId: values.customerId,
@@ -122,7 +140,7 @@ const PaymentForm: React.FC<PaymentFormProps> = ({
         paymentMethod: values.paymentMethod,
         transactionReference: values.transactionReference,
         status: 'completed' as const,
-        processedBy: '550e8400-e29b-41d4-a716-446655440000', // Using a valid UUID format as placeholder
+        processedBy: validUserId, // Use the valid user ID from the database
       };
 
       console.log('Payment data to submit:', paymentData);
@@ -283,7 +301,7 @@ const PaymentForm: React.FC<PaymentFormProps> = ({
               >
                 Cancel
               </Button>
-              <Button type="submit" disabled={loading}>
+              <Button type="submit" disabled={loading || !validUserId}>
                 {loading ? 'Saving...' : payment ? 'Update' : 'Create'}
               </Button>
             </div>
