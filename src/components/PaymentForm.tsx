@@ -122,7 +122,7 @@ const PaymentForm: React.FC<PaymentFormProps> = ({
         paymentMethod: values.paymentMethod,
         transactionReference: values.transactionReference,
         status: 'completed' as const,
-        processedBy: 'system-user', // Using a placeholder since we don't have auth
+        processedBy: '550e8400-e29b-41d4-a716-446655440000', // Using a valid UUID format as placeholder
       };
 
       console.log('Payment data to submit:', paymentData);
