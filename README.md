@@ -39,8 +39,9 @@ Before running this project, make sure you have the following installed:
 ### 1. Clone the Repository
 
 ```bash
-git clone <repository-url>
-cd car-cruise-control-system
+git clone https://github.com/hamarshehmhmd/Car_Rental_Management_System_DBProject
+
+cd Car_Rental_Management_System_DBProject
 ```
 
 ### 2. Install Dependencies
