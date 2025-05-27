@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import DataTable from '@/components/DataTable';
 import StatusBadge from '@/components/StatusBadge';
 import CarLogo from '@/components/CarLogo';
-import { DashboardSummary, Rental, Reservation, Vehicle } from '@/types';
+import { DashboardSummary, Rental, Reservation, Vehicle, MaintenanceRecord } from '@/types';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
 import { rentalService } from '@/services/rentalService';
@@ -15,6 +15,9 @@ import { reservationService } from '@/services/reservationService';
 import { carService } from '@/services/carService';
 import { paymentService } from '@/services/paymentService';
 import { invoiceService } from '@/services/invoiceService';
+import { maintenanceService } from '@/services/maintenanceService';
+import { testSupabaseConnection } from '@/utils/testSupabase';
+import { seedDatabase } from '@/utils/seedData';
 
 const Dashboard: React.FC = () => {
   const [summary, setSummary] = useState<DashboardSummary>({
@@ -29,24 +32,57 @@ const Dashboard: React.FC = () => {
   const [activeRentals, setActiveRentals] = useState<Rental[]>([]);
   const [upcomingReservations, setUpcomingReservations] = useState<Reservation[]>([]);
   const [maintenanceVehicles, setMaintenanceVehicles] = useState<Vehicle[]>([]);
+  const [activeMaintenanceRecords, setActiveMaintenanceRecords] = useState<MaintenanceRecord[]>([]);
   const [loading, setLoading] = useState(true);
   
   const fetchDashboardData = useCallback(async () => {
     setLoading(true);
     try {
+      // Test Supabase connection first
+      console.log('🚀 Starting dashboard data fetch...');
+      await testSupabaseConnection();
+      
+      // Seed database if empty
+      console.log('🌱 Checking if database needs seeding...');
+      await seedDatabase();
+      
       // Fetch all data in parallel
-      const [vehicles, rentals, reservations, payments, invoices] = await Promise.all([
+      console.log('📊 Fetching dashboard data...');
+      const [vehicles, rentals, reservations, payments, invoices, maintenanceRecords] = await Promise.all([
         carService.getVehicles(),
         rentalService.getRentals(),
         reservationService.getReservations(),
         paymentService.getPayments(),
-        invoiceService.getInvoices()
+        invoiceService.getInvoices(),
+        maintenanceService.getMaintenanceRecords()
       ]);
+      
+      console.log('📈 Data fetched:', {
+        vehicles: vehicles.length,
+        rentals: rentals.length,
+        reservations: reservations.length,
+        payments: payments.length,
+        invoices: invoices.length,
+        maintenanceRecords: maintenanceRecords.length
+      });
       
       // Calculate vehicle counts
       const availableCount = vehicles.filter(v => v.status === 'available').length;
       const maintenanceCount = vehicles.filter(v => v.status === 'maintenance').length;
       const maintenanceVehiclesList = vehicles.filter(v => v.status === 'maintenance');
+      
+      console.log('🚗 Vehicle status breakdown:', {
+        total: vehicles.length,
+        available: availableCount,
+        maintenance: maintenanceCount,
+        maintenanceVehicles: maintenanceVehiclesList.map(v => `${v.make} ${v.model} (${v.status})`),
+        allVehicleStatuses: vehicles.map(v => `${v.make} ${v.model}: ${v.status}`)
+      });
+      
+      // Get active maintenance records (in-progress or scheduled)
+      const activeMaintenanceList = maintenanceRecords.filter(m => 
+        m.status === 'in-progress' || m.status === 'scheduled'
+      );
       
       // Get active rentals (status = 'active')
       const activeRentalsList = rentals.filter(r => r.status === 'active');
@@ -93,6 +129,7 @@ const Dashboard: React.FC = () => {
       setActiveRentals(activeRentalsList.slice(0, 5));
       setUpcomingReservations(upcomingReservationsList.slice(0, 5));
       setMaintenanceVehicles(maintenanceVehiclesList);
+      setActiveMaintenanceRecords(activeMaintenanceList.slice(0, 5));
       
     } catch (error) {
       console.error('Error fetching dashboard data:', error);
@@ -246,39 +283,50 @@ const Dashboard: React.FC = () => {
   
   const maintenanceColumns = [
     {
-      key: 'make',
+      key: 'vehicle',
       header: 'Vehicle',
-      cell: (vehicle: Vehicle) => (
+      cell: (record: MaintenanceRecord) => (
         <div className="flex items-center gap-2">
           <div className="w-8 h-8 rounded-full overflow-hidden bg-gray-100 flex items-center justify-center">
-            <CarLogo 
-              make={vehicle.make} 
-              model={vehicle.model}
-              className="w-6 h-6 object-contain"
-              fallbackClassName="w-4 h-4 text-gray-400"
-            />
+            <Wrench className="w-4 h-4 text-gray-400" />
           </div>
           <div>
-            <span className="font-medium text-sm">{vehicle.make} {vehicle.model}</span>
-            <div className="text-xs text-gray-500">{vehicle.year}</div>
+            <span className="font-medium text-sm">{record.vehicleInfo}</span>
+            <div className="text-xs text-gray-500">{record.maintenanceType}</div>
           </div>
         </div>
       )
     },
     {
-      key: 'licensePlate',
-      header: 'License',
-      cell: (vehicle: Vehicle) => (
-        <span className="font-mono text-sm">{vehicle.licensePlate}</span>
+      key: 'technician',
+      header: 'Technician',
+      cell: (record: MaintenanceRecord) => (
+        <span className="text-sm">{record.technicianName}</span>
+      )
+    },
+    {
+      key: 'date',
+      header: 'Date',
+      cell: (record: MaintenanceRecord) => (
+        <span className="text-sm">{new Date(record.maintenanceDate).toLocaleDateString()}</span>
+      )
+    },
+    {
+      key: 'cost',
+      header: 'Cost',
+      cell: (record: MaintenanceRecord) => (
+        <span className="text-sm">${record.cost.toLocaleString()}</span>
       )
     },
     {
       key: 'status',
       header: 'Status',
-      cell: (vehicle: Vehicle) => <StatusBadge status={vehicle.status} type="vehicle" />
+      cell: (record: MaintenanceRecord) => <StatusBadge status={record.status} type="maintenance" />
     }
   ];
   
+
+
   return (
     <div className="min-h-screen">
       <PageHeader 
@@ -287,6 +335,8 @@ const Dashboard: React.FC = () => {
       />
       
       <div className="p-4 md:p-6 lg:p-8 space-y-6">
+
+        
         {/* Stats Cards - Responsive Grid */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4 lg:gap-6">
           <StatsCard
@@ -360,14 +410,14 @@ const Dashboard: React.FC = () => {
           </Card>
         </div>
         
-        {/* Maintenance Vehicles Table - Full Width */}
+        {/* Active Maintenance Records Table - Full Width */}
         <Card>
           <CardHeader className="pb-4">
-            <CardTitle className="text-lg">Vehicles in Maintenance</CardTitle>
+            <CardTitle className="text-lg">Active Maintenance Records</CardTitle>
           </CardHeader>
           <CardContent className="pt-0">
             <DataTable
-              data={maintenanceVehicles}
+              data={activeMaintenanceRecords}
               columns={maintenanceColumns}
               searchable={false}
               loading={loading}
